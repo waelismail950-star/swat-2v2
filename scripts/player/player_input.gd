@@ -16,3 +16,6 @@ var fire := false
 var reload := false
 ## Index into the carried weapons.
 var weapon_slot := 0
+## Held state of the interact and crack-door keys; presses are detected by the controller.
+var interact := false
+var crack := false

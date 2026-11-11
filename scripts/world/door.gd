@@ -17,6 +17,9 @@ var door_name := ""
 var width := 1.0
 var height := 2.1
 
+## A locked door ignores players (exterior doors during setup).
+var locked := false
+
 var state := State.CLOSED
 ## +1 swings the panel toward local -Z, -1 toward local +Z.
 var swing_sign := 1.0
@@ -45,6 +48,33 @@ func _ready() -> void:
 	add_child(_panel)
 
 
+func interact_prompt(_player: Player) -> String:
+	if locked:
+		return "%s (locked)" % door_name
+	return "%s (%s)\n[F] %s    [V] %s" % [door_name, State.keys()[state].to_lower(),
+			"close" if state == State.OPEN else "open",
+			"close" if state == State.CRACKED else "crack"]
+
+
+func on_interact(player: Player) -> void:
+	if not locked:
+		interact(Action.TOGGLE_OPEN, player.global_position)
+
+
+func on_crack(player: Player) -> void:
+	if not locked:
+		interact(Action.TOGGLE_CRACK, player.global_position)
+
+
+## Shuts the door instantly (round reset).
+func reset(lock: bool) -> void:
+	locked = lock
+	state = State.CLOSED
+	angle_deg = 0.0
+	_panel.rotation_degrees.y = 0.0
+	state_changed.emit(self)
+
+
 ## Applies a door action. `from` is where the operator stands (world space).
 func interact(action: Action, from: Vector3) -> void:
 	var next := _next_state(action)
@@ -61,6 +91,11 @@ func target_angle_deg() -> float:
 		State.OPEN:
 			return swing_sign * Cfg.door_open_angle_deg
 	return 0.0
+
+
+## World-space point on the panel to look at when operating the door.
+func panel_point() -> Vector3:
+	return to_global(Basis(Vector3.UP, deg_to_rad(angle_deg)) * Vector3(width * 0.5, height * 0.7, 0.0))
 
 
 func is_settled() -> bool:

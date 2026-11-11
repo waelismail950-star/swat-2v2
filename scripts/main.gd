@@ -1,37 +1,30 @@
 extends Node3D
-## Sandbox entry point: the house, one local player with every weapon, and
-## respawning dummy targets. Rounds and networking replace this later.
+## Local test mode: one human and three bots play a full match in the house.
+## The human's roster plays Entry first.
 
 const PLAYER_SCENE := preload("res://scenes/player/player.tscn")
-const DUMMY_RESPAWN_TIME := 3.0
-const DUMMY_COLOR := Color(0.8, 0.3, 0.25)
 
-## Position and facing (yaw in degrees) of each dummy target.
-const DUMMIES := [
-	[Vector3(3, 0, 7), 180.0],
-	[Vector3(0, 0, 0.5), 180.0],
-	[Vector3(-5.5, 0, 3.5), -90.0],
-	[Vector3(5.5, 0, -3.5), 135.0],
-	[Vector3(0, 3, 0), 180.0],
-	[Vector3(-5, 3, -3), -135.0],
-]
-
-var _player: Player
+var game: Match
+var _local: Player
 
 @onready var _hud: Hud = $Hud
 
 
 func _ready() -> void:
-	add_child(House.new())
-	_player = _spawn(Vector3(0, 0.1, 9), 0.0, true)
-	_player.arsenal.equip(["carbine", "pistol", "shotgun"])
-	_player.died.connect(_respawn_later.bind(_player.global_transform))
-	_hud.player = _player
-	for spec: Array in DUMMIES:
-		var dummy := _spawn(spec[0], spec[1], false)
-		dummy.body.set_color(DUMMY_COLOR)
-		dummy.arsenal.equip(["pistol"])
-		dummy.died.connect(_respawn_later.bind(dummy.global_transform))
+	var house := House.new()
+	add_child(house)
+	var hostage := Hostage.new()
+	add_child(hostage)
+	game = Match.new(house, hostage)
+	add_child(game)
+
+	_local = _add_player("You", 0, false)
+	_add_player("Bot Alpha", 0, true)
+	_add_player("Bot Bravo", 1, true)
+	_add_player("Bot Charlie", 1, true)
+	_hud.player = _local
+	_hud.game = game
+	game.start_match()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
@@ -42,15 +35,24 @@ func _unhandled_input(event: InputEvent) -> void:
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
-func _spawn(at: Vector3, yaw_deg: float, local: bool) -> Player:
+func _process(_delta: float) -> void:
+	# A downed player watches through their teammate's eyes.
+	var view := _local
+	if _local.is_dead:
+		for mate in game.players_on(_local.team):
+			if not mate.is_dead:
+				view = mate
+	if not view.camera.current:
+		view.camera.make_current()
+
+
+func _add_player(display_name: String, roster: int, is_bot: bool) -> Player:
 	var player: Player = PLAYER_SCENE.instantiate()
-	player.controlled_locally = local
-	player.position = at
-	player.rotation_degrees.y = yaw_deg
+	player.display_name = display_name
+	player.controlled_locally = not is_bot
 	add_child(player)
+	if is_bot:
+		player.brain = Bot.new(player, game)
+		player.add_child(player.brain)
+	game.add_player(player, roster)
 	return player
-
-
-func _respawn_later(victim: Player, _killer: Node, at: Transform3D) -> void:
-	await get_tree().create_timer(DUMMY_RESPAWN_TIME).timeout
-	victim.respawn(at)

@@ -7,6 +7,8 @@ signal died(victim: Player, killer: Node)
 
 ## Eye height of a downed player's camera.
 const DOWNED_EYE := 0.35
+## Scene-tree group every player joins.
+const GROUP := &"players"
 
 @export var controlled_locally := true
 
@@ -18,6 +20,15 @@ var lean_frac := 0.0
 var health := 0.0
 var is_dead := false
 var arsenal := Arsenal.new(self)
+var team := Team.Id.ENTRY
+## Which of the two groups of players this one belongs to for the whole match.
+var roster := 0
+var display_name := ""
+## Set for bots: fills `input` each tick instead of the keyboard.
+var brain: Bot
+
+var _interact_was_down := false
+var _crack_was_down := false
 
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Camera
@@ -35,6 +46,7 @@ func _ready() -> void:
 	_collider.shape = _capsule
 	collision_mask = Layers.WORLD | Layers.PLAYER
 	floor_snap_length = 0.3
+	add_to_group(GROUP)
 	add_child(arsenal)
 	arsenal.fired.connect(_on_fired)
 	body.setup(self)
@@ -68,10 +80,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		var sens := deg_to_rad(Cfg.mouse_sensitivity_deg)
 		input.yaw = wrapf(input.yaw - event.relative.x * sens, -PI, PI)
 		input.pitch -= event.relative.y * sens
-	elif event.is_action_pressed("interact"):
-		use_door(Door.Action.TOGGLE_OPEN)
-	elif event.is_action_pressed("door_crack"):
-		use_door(Door.Action.TOGGLE_CRACK)
 	else:
 		for slot in arsenal.slots.size():
 			if event.is_action_pressed("weapon_%d" % (slot + 1)):
@@ -81,7 +89,18 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	if controlled_locally:
 		_read_local_input()
+	elif brain != null:
+		brain.think(delta)
 	simulate(delta)
+
+
+## Puts the player on a side: colour, weapons and side-specific stats follow from it.
+func assign_team(new_team: Team.Id) -> void:
+	team = new_team
+	body.set_color(Team.COLORS[team])
+	var loadout: Array[String] = []
+	loadout.assign(Team.LOADOUTS[team])
+	arsenal.equip(loadout)
 
 
 func _read_local_input() -> void:
@@ -90,6 +109,8 @@ func _read_local_input() -> void:
 	input.crouch = Input.is_action_pressed("crouch")
 	input.lean = Input.get_axis("lean_left", "lean_right")
 	input.reload = Input.is_action_pressed("reload")
+	input.interact = Input.is_action_pressed("interact")
+	input.crack = Input.is_action_pressed("door_crack")
 	# The click that captures the mouse must not also fire.
 	input.fire = Input.is_action_pressed("fire") and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 
@@ -103,6 +124,7 @@ func simulate(delta: float) -> void:
 		_update_lean(delta)
 		_update_velocity(delta)
 		move_and_slide()
+		_update_interaction(delta)
 	_apply_view()
 	arsenal.tick(delta)
 	if controlled_locally:
@@ -130,6 +152,8 @@ func max_speed() -> float:
 		speed = Cfg.sprint_speed
 	if input.lean != 0.0:
 		speed *= Cfg.lean_move_mult
+	if team == Team.Id.SUSPECTS:
+		speed *= Cfg.suspect_speed_mult
 	return speed
 
 
@@ -139,6 +163,8 @@ func take_hit(damage: float, zone: Hitbox.Zone, shooter: Node) -> bool:
 		return false
 	if zone == Hitbox.Zone.HEAD:
 		damage *= Cfg.headshot_mult
+	elif team == Team.Id.ENTRY:
+		damage *= Cfg.entry_body_damage_mult
 	health = maxf(health - damage, 0.0)
 	if health > 0.0:
 		return false
@@ -151,23 +177,44 @@ func take_hit(damage: float, zone: Hitbox.Zone, shooter: Node) -> bool:
 	return true
 
 
-## The door under the crosshair within reach, or null.
-func aimed_door() -> Door:
+## The thing under the crosshair within reach that can be interacted with, or null.
+## Interactables are nodes with interact_prompt(player) and on_interact(player);
+## optionally on_interact_hold(player, delta) and on_crack(player).
+func aimed_interactable() -> Node:
 	var from := camera.global_position
 	var to := from - camera.global_basis.z * Cfg.interact_range
-	var query := PhysicsRayQueryParameters3D.create(from, to, Layers.WORLD)
+	var query := PhysicsRayQueryParameters3D.create(from, to, Layers.WORLD | Layers.INTERACT)
+	query.collide_with_areas = true
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
-	if hit.is_empty():
-		return null
-	return hit.collider.get_parent() as Door
+	var node: Node = hit.get("collider")
+	while node != null and not node.has_method("interact_prompt"):
+		node = node.get_parent()
+	return node
 
 
-func use_door(action: Door.Action) -> bool:
-	var door := aimed_door()
-	if door == null:
-		return false
-	door.interact(action, global_position)
-	return true
+func press_interact() -> void:
+	var target := aimed_interactable()
+	if target != null:
+		target.on_interact(self)
+
+
+func press_crack() -> void:
+	var target := aimed_interactable()
+	if target != null and target.has_method("on_crack"):
+		target.on_crack(self)
+
+
+func _update_interaction(delta: float) -> void:
+	if input.interact:
+		if not _interact_was_down:
+			press_interact()
+		var target := aimed_interactable()
+		if target != null and target.has_method("on_interact_hold"):
+			target.on_interact_hold(self, delta)
+	if input.crack and not _crack_was_down:
+		press_crack()
+	_interact_was_down = input.interact
+	_crack_was_down = input.crack
 
 
 func _update_crouch(delta: float) -> void:

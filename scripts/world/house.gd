@@ -78,8 +78,32 @@ const DOORS := [
 	{name = "Deck Door", y = UPPER_Y, pos = Vector2(2, 2.5), axis = "z", hinge = 1},
 ]
 
+const EXTERIOR_DOORS: Array[String] = ["Front Door", "Deck Door"]
+
+## Where each side starts a round, and where a rescued hostage has to get to.
+const ENTRY_SPAWNS: Array[Vector3] = [Vector3(3.2, 0, 9), Vector3(4.8, 0, 9)]
+const SUSPECT_SPAWNS: Array[Vector3] = [Vector3(-0.8, 0, 2), Vector3(0.8, 0, 2)]
+const EXTRACTION := Vector3(4, 0, 9.5)
+
+## Rooms the hostage can be held in. `spot` is where the hostage kneels; `posts` are
+## where defending bots stand.
+const HOSTAGE_ROOMS := [
+	{room = "Kitchen", spot = Vector3(-5.6, 0, -3.6), posts = [Vector3(-3.0, 0, -4.2), Vector3(-6.2, 0, -1.2)]},
+	{room = "Study", spot = Vector3(5.6, 0, 3.6), posts = [Vector3(3.0, 0, 4.2), Vector3(6.2, 0, 1.2)]},
+	{room = "Master", spot = Vector3(-5.6, UPPER_Y, -3.6), posts = [Vector3(-3.0, UPPER_Y, -4.2), Vector3(-6.2, UPPER_Y, -1.2)]},
+	{room = "Kids", spot = Vector3(5.6, UPPER_Y, -3.6), posts = [Vector3(3.0, UPPER_Y, -4.2), Vector3(6.2, UPPER_Y, -1.2)]},
+]
+
+## How far in front of a door its waypoints sit: clear of the panel when it stands open.
+const DOOR_STANDOFF := 1.3
+
 ## Door name -> Door.
 var doors: Dictionary[String, Door] = {}
+var hostage_spots: Array[HostageSpot] = []
+
+var _nav := NavGraph.new()
+## Region name -> centres of the doorways leading into it.
+var _entrances: Dictionary[String, Array] = {}
 
 
 func _ready() -> void:
@@ -92,6 +116,76 @@ func _ready() -> void:
 		_build_door(spec)
 	_build_stairs()
 	_build_exterior_ramp()
+	_build_nav()
+	for i in HOSTAGE_ROOMS.size():
+		var spot := HostageSpot.new()
+		spot.index = i
+		spot.room_name = HOSTAGE_ROOMS[i].room
+		spot.position = HOSTAGE_ROOMS[i].spot
+		add_child(spot)
+		hostage_spots.append(spot)
+
+
+## Shuts every door at once. Exterior doors are locked if `lock_exterior`.
+func reset_doors(lock_exterior: bool) -> void:
+	for door: Door in doors.values():
+		door.reset(lock_exterior and door.door_name in EXTERIOR_DOORS)
+
+
+func set_exterior_locked(locked: bool) -> void:
+	for door_name in EXTERIOR_DOORS:
+		doors[door_name].locked = locked
+
+
+## Name of the room (or "Stairwell", "Outside") containing a point.
+func region_at(point: Vector3) -> String:
+	var flat := Vector2(point.x, point.z)
+	for room: Dictionary in ROOMS:
+		# The stairwell spans both floors, so it ignores height.
+		if room.rect.has_point(flat) and (room.name == "Stairwell" or absf(point.y - room.y) < 1.5):
+			return room.name
+	return "Outside"
+
+
+## Waypoints to walk from `from` to `to`, ending with `to`. Doors on the way may be shut.
+func route(from: Vector3, to: Vector3) -> Array[Vector3]:
+	return _nav.route(from, region_at(from), to, region_at(to))
+
+
+## Centres of the doorways leading into a region.
+func entrances(region: String) -> Array:
+	return _entrances.get(region, [])
+
+
+func _build_nav() -> void:
+	for spec: Dictionary in DOORS:
+		var p: Vector2 = spec.pos
+		var centre := Vector3(p.x, spec.y, p.y)
+		var normal := Vector3(0, 0, 1) if spec.axis == "x" else Vector3(1, 0, 0)
+		var sides: Array[int] = []
+		for sign: float in [1.0, -1.0]:
+			var point := centre + normal * DOOR_STANDOFF * sign
+			var region := region_at(point)
+			sides.append(_nav.add_point(point, region))
+			if not _entrances.has(region):
+				_entrances[region] = []
+			_entrances[region].append(centre)
+		_nav.link(sides[0], sides[1])
+
+	# Stairs: foot, both ends of the mid landing, top.
+	var foot := _nav.add_point(Vector3(1.0, 0, -1.0), "Foyer")
+	var landing_east := _nav.add_point(Vector3(1.0, UPPER_Y * 0.5, -4.3), "Stairwell")
+	var landing_west := _nav.add_point(Vector3(-1.0, UPPER_Y * 0.5, -4.3), "Stairwell")
+	var top := _nav.add_point(Vector3(-1.0, UPPER_Y, -0.9), "Upper Hall")
+	_nav.link(foot, landing_east)
+	_nav.link(landing_east, landing_west)
+	_nav.link(landing_west, top)
+
+	# Exterior ramp: base, top landing, and a point just inside the parapet gap.
+	var ramp_base := _nav.add_point(Vector3(7.9, 0, 7.5), "Outside")
+	var ramp_top := _nav.add_point(Vector3(7.9, UPPER_Y, 0.7), "Deck")
+	_nav.add_point(Vector3(6.3, UPPER_Y, 0.7), "Deck")
+	_nav.link(ramp_base, ramp_top)
 
 
 func _build_ground() -> void:

@@ -78,9 +78,44 @@ var weapons := {
 		falloff_start = 20.0, falloff_end = 40.0, falloff_min = 0.6,
 	},
 	"shotgun": {
-		name = "Shotgun", auto = false, damage = 14.0, pellets = 8, fire_interval = 0.9,
+		name = "Shotgun", auto = false, damage = 16.0, pellets = 8, fire_interval = 0.9,
 		mag = 6, reload_time = 2.8, spread_deg = 4.0, move_spread_deg = 1.5,
 		recoil_pitch_deg = 5.0, recoil_yaw_deg = 1.2,
 		falloff_start = 4.0, falloff_end = 10.0, falloff_min = 0.3,
 	},
 }
+
+# --- Teams ---
+## Suspects move at this fraction of every Entry speed.
+var suspect_speed_mult := 0.9
+## Entry light armor: multiplier on body damage taken. Headshots ignore it.
+var entry_body_damage_mult := 0.8
+
+# --- Match ---
+## Wins needed to take the match (3 = best of 5).
+var rounds_to_win := 3
+## Sides swap once, after this many rounds.
+var swap_sides_after_round := 2
+var setup_time := 25.0
+var round_time := 180.0
+## Pause on the result screen between rounds.
+var round_end_time := 6.0
+## Pause on the final score before a new match starts.
+var match_end_time := 12.0
+
+# --- Hostage ---
+## 1 means any direct hit is fatal.
+var hostage_health := 1.0
+## Seconds an Entry operator must hold interact to secure the hostage.
+var hostage_secure_time := 3.0
+var hostage_speed := 2.4
+## A secured hostage only moves while an Entry operator is within this distance.
+var hostage_follow_radius := 4.0
+
+# --- Bots (local test mode) ---
+## Seconds a bot must see an enemy before it may fire.
+var bot_reaction_time := 0.45
+var bot_aim_error_deg := 2.5
+var bot_turn_speed_deg := 300.0
+var bot_fov_deg := 110.0
+var bot_view_range := 25.0

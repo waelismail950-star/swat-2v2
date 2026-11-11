@@ -12,6 +12,8 @@ var current := 0
 ## View kick in radians: x = yaw, y = pitch (positive is up). Added on top of the look angles.
 var recoil := Vector2.ZERO
 var rng := RandomNumberGenerator.new()
+## Weapons cannot fire while safe (setup phase, round end).
+var safe := false
 
 var _player: Player
 var _trigger_was_down := false
@@ -81,7 +83,7 @@ func tick(delta: float) -> void:
 
 	if ready and gun.ammo < stats.mag and (input.reload or (pulled and gun.ammo == 0)):
 		gun.reload_left = stats.reload_time
-	elif ready and pulled and gun.cooldown <= 0.0 and gun.ammo > 0:
+	elif ready and pulled and gun.cooldown <= 0.0 and gun.ammo > 0 and not safe:
 		_shoot(gun)
 
 

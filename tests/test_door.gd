@@ -113,17 +113,41 @@ func test_door_cannot_be_held_shut_by_leaning_on_it() -> void:
 func test_player_operates_door_only_when_aiming_at_it_in_range() -> void:
 	var player := _spawn(Vector3(0, 0, 4.0))
 	await look_at_point(player, Vector3(0, 1.2, 0))
-	check(player.aimed_door() == null, "4 m is out of reach")
-	check(not player.use_door(Door.Action.TOGGLE_OPEN), "use fails out of reach")
+	check(player.aimed_interactable() == null, "4 m is out of reach")
+	player.press_interact()
+	check(door.state == Door.State.CLOSED, "pressing interact out of reach does nothing")
 
 	check(await walk_to(player, Vector3(0, 0, 1.5), 3.0), "walk up to the door")
 	await look_at_point(player, Vector3(0, 1.2, 0))
-	check(player.aimed_door() == door, "door is under the crosshair")
+	check(player.aimed_interactable() == door, "door is under the crosshair")
 
 	await look_at_point(player, Vector3(3, 1.2, 0))
-	check(player.aimed_door() == null, "looking at the wall is not the door")
+	check(player.aimed_interactable() == null, "looking at the wall is not the door")
 
 	await look_at_point(player, Vector3(0, 1.2, 0))
-	check(player.use_door(Door.Action.TOGGLE_OPEN), "use succeeds")
+	player.input.crack = true
+	await wait(0.4)
+	player.input.crack = false
+	check(door.state == Door.State.CRACKED, "crack key cracks the door once while held")
+	player.input.interact = true
 	await wait(0.6)
+	player.input.interact = false
+	check(door.state == Door.State.OPEN, "interact key opens it once while held")
 	check_near(door.angle_deg, Cfg.door_open_angle_deg, 0.01, "door opened away from the player")
+
+
+func test_locked_door_ignores_players_and_reset_closes_it() -> void:
+	var player := _spawn(SOUTH)
+	await look_at_point(player, Vector3(0, 1.2, 0))
+	door.locked = true
+	player.press_interact()
+	player.press_crack()
+	check(door.state == Door.State.CLOSED, "locked door stays closed")
+	door.locked = false
+	player.press_interact()
+	await wait(0.6)
+	check(door.state == Door.State.OPEN, "unlocked door opens")
+	door.reset(true)
+	check(door.state == Door.State.CLOSED and door.angle_deg == 0.0 and door.locked, "reset shuts and locks at once")
+	await wait(0.02)
+	check(not has_line_of_sight(Vector3(0, 1.5, 1.5), Vector3(0, 1.5, -1.5)), "reset door blocks sight by the next tick")

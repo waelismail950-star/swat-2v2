@@ -22,11 +22,13 @@ func _ready() -> void:
 	shooter.arsenal.fired.connect(func(_w: Weapon, _f: Vector3, _s: Array) -> void: shots_fired += 1)
 
 
+## Targets are Suspects (no armor) unless a test changes their team.
 func _spawn(at: Vector3, weapons: Array[String] = ["pistol"]) -> Player:
 	var player: Player = PLAYER_SCENE.instantiate()
 	player.controlled_locally = false
 	player.position = at
 	add_child(player)
+	player.team = Team.Id.SUSPECTS
 	player.arsenal.equip(weapons)
 	return player
 
@@ -57,6 +59,36 @@ func test_legs_count_as_body() -> void:
 	await look_at_point(shooter, RANGE + Vector3(0, 0.4, 0))
 	await _pull_trigger()
 	check_near(target.health, Cfg.max_health - Cfg.weapons.carbine.damage, 0.01, "leg hit is a body hit")
+
+
+func test_entry_armor_reduces_body_damage_but_not_headshots() -> void:
+	var armored := _spawn(RANGE)
+	armored.team = Team.Id.ENTRY
+	await look_at_point(shooter, RANGE + Vector3(0, CHEST_Y, 0))
+	await _pull_trigger()
+	check_near(armored.health, Cfg.max_health - Cfg.weapons.carbine.damage * Cfg.entry_body_damage_mult, 0.01,
+			"armor scales body damage")
+	await wait(1.0)
+	await look_at_point(shooter, RANGE + Vector3(0, HEAD_Y, 0))
+	await _pull_trigger()
+	check(armored.is_dead, "armor does not save you from a headshot")
+
+
+func test_suspects_are_slower() -> void:
+	var suspect := _spawn(Vector3(10, 0, 0))
+	suspect.input.move = Vector2(0, 1)
+	await wait(1.0)
+	check_near(Vector2(suspect.velocity.x, suspect.velocity.z).length(),
+			Cfg.walk_speed * Cfg.suspect_speed_mult, 0.05, "suspect walk speed")
+
+
+func test_safe_weapons_cannot_fire() -> void:
+	shooter.arsenal.safe = true
+	await _pull_trigger()
+	check(shots_fired == 0, "no shots while safe")
+	shooter.arsenal.safe = false
+	await _pull_trigger()
+	check(shots_fired == 1, "fires once live")
 
 
 func test_headshot_kills_and_reports_killer() -> void:
@@ -280,6 +312,12 @@ func test_shotgun_is_lethal_up_close_and_weak_at_range() -> void:
 	await look_at_point(shooter, Vector3(0, CHEST_Y, -2))
 	await _pull_trigger()
 	check(near.is_dead, "one blast at 2 m kills (health %.0f)" % near.health)
+	var armored := _spawn(Vector3(-3, 0, -2))
+	armored.team = Team.Id.ENTRY
+	await wait(1.0)
+	await look_at_point(shooter, Vector3(-3, CHEST_Y, -2))
+	await _pull_trigger()
+	check(armored.is_dead, "one blast at 2 m kills through Entry armor too (health %.0f)" % armored.health)
 	await wait(1.0)
 	await look_at_point(shooter, Vector3(3, CHEST_Y, -12))
 	await _pull_trigger()
