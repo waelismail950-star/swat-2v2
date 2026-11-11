@@ -23,6 +23,8 @@ func _ready() -> void:
 	_capsule = CapsuleShape3D.new()
 	_capsule.radius = Cfg.body_radius
 	_collider.shape = _capsule
+	collision_layer = Layers.PLAYER
+	collision_mask = Layers.WORLD | Layers.PLAYER
 	floor_snap_length = 0.3
 	camera.current = controlled_locally
 	_apply_body_shape()
@@ -36,6 +38,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		var sens := deg_to_rad(Cfg.mouse_sensitivity_deg)
 		input.yaw = wrapf(input.yaw - event.relative.x * sens, -PI, PI)
 		input.pitch -= event.relative.y * sens
+	elif event.is_action_pressed("interact"):
+		use_door(Door.Action.TOGGLE_OPEN)
+	elif event.is_action_pressed("door_crack"):
+		use_door(Door.Action.TOGGLE_CRACK)
 
 
 func _physics_process(delta: float) -> void:
@@ -84,6 +90,25 @@ func max_speed() -> float:
 	if input.lean != 0.0:
 		speed *= Cfg.lean_move_mult
 	return speed
+
+
+## The door under the crosshair within reach, or null.
+func aimed_door() -> Door:
+	var from := camera.global_position
+	var to := from - camera.global_basis.z * Cfg.interact_range
+	var query := PhysicsRayQueryParameters3D.create(from, to, Layers.WORLD)
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		return null
+	return hit.collider.get_parent() as Door
+
+
+func use_door(action: Door.Action) -> bool:
+	var door := aimed_door()
+	if door == null:
+		return false
+	door.interact(action, global_position)
+	return true
 
 
 func _update_crouch(delta: float) -> void:

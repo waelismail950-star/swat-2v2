@@ -33,3 +33,11 @@ var lean_head_radius := 0.18
 # --- Look ---
 var mouse_sensitivity_deg := 0.12  # degrees per pixel of mouse motion
 var pitch_limit_deg := 85.0
+
+# --- Doors ---
+var door_swing_speed_deg := 240.0  # degrees per second
+## How far a cracked door stands ajar. Must stay too narrow to walk through.
+var door_crack_angle_deg := 20.0
+var door_open_angle_deg := 90.0
+## Max distance from the eye to a door you can operate.
+var interact_range := 2.2
