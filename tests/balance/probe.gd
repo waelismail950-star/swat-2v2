@@ -21,7 +21,7 @@ func _ready() -> void:
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--trials="):
 			trials = int(argument.trim_prefix("--trials="))
-	Cfg.setup_time = 12.0   # long enough for the guards to reach their posts
+	Cfg.setup_time = 20.0   # long enough for the guards to place gadgets and reach their posts
 	Cfg.round_time = ROUND_LIMIT
 	Cfg.round_end_time = 0.1
 

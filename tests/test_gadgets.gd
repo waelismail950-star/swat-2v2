@@ -189,22 +189,41 @@ func test_flashbang_through_an_open_door_blinds_the_room() -> void:
 	door.interact(Door.Action.TOGGLE_OPEN, a0.global_position)
 	await wait(0.6)
 	await _tap(a0, 0)
-	await wait(Cfg.flash_fuse + 0.2)
+	await wait(Cfg.flash_fuse - 0.3)
+	var grenade := _grenade()
+	if grenade != null:
+		_face(b0, grenade.global_position, false)   # a careless defender who watches it land
+	await wait(0.5)
 	check(b0.flash_left > 0.5, "with the door open the flash reaches the defender (%.2f s)" % b0.flash_left)
 
 
-func test_blind_bot_cannot_see_or_shoot() -> void:
+func test_blind_bot_sees_nobody_but_fires_the_way_it_was_facing() -> void:
 	Cfg.round_end_time = 100.0
+	Cfg.weapons.shotgun.spread_deg = 0.0
 	await _go_live()
-	await _place(b0, Vector3(-12, 0, 14), 0.0)
-	await _place(a0, Vector3(-12, 0, 8), PI)
+	await _place(b0, Vector3(-12, 0, 14), 0.0)     # facing north
+	await _place(a0, Vector3(-8, 0, 8), PI)        # off to the side, in plain view of nobody once blind
 	await _park([a1, b1])
 	world.give_brain(b0)
-	check(b0.brain._visible_enemy() == a0, "the bot can see the operator in front of it")
-	b0.apply_flash(2.0)
+	check(b0.brain._visible_enemy() == null or b0.brain._visible_enemy() == a0, "setup sanity")
+	b0.apply_flash(3.0)
 	check(b0.brain._visible_enemy() == null, "blinded, it sees nobody")
-	await wait(1.5)
-	check_near(a0.health, Cfg.max_health, 0.01, "and does not shoot")
+	await wait(2.0)
+	check_near(a0.health, Cfg.max_health, 0.01, "so someone off its line of fire is untouched")
+	check(b0.arsenal.weapon().ammo < Cfg.weapons.shotgun.mag, "but it is firing blind, at the way it was facing")
+
+
+func test_blind_guards_punish_walking_through_the_line_they_were_holding() -> void:
+	Cfg.round_end_time = 100.0
+	Cfg.weapons.shotgun.spread_deg = 1.0
+	await _go_live()
+	await _place(b0, Vector3(-12, 0, 14), 0.0)     # facing north
+	await _place(a0, Vector3(-12, 0, 9), PI)       # standing right in the line it is aimed down
+	await _park([a1, b1])
+	world.give_brain(b0)
+	b0.apply_flash(3.0)
+	await wait(2.5)
+	check(a0.is_dead, "entering while the guard is blind but still aimed at the door is still fatal (health %.0f)" % a0.health)
 
 
 func test_wedge_holds_a_door_until_forced() -> void:

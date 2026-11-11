@@ -2,6 +2,10 @@ class_name Bot
 extends Node
 ## Simple AI for local test mode. It fills a player's input each tick, exactly as a
 ## keyboard would. It cheats in one way: Entry bots know which room the hostage is in.
+##
+## Suspect bots vary from round to round: they pick one of several guard layouts, and may
+## shut a door of the hostage room and wedge it, or set a trip alarm inside it, during setup.
+## They swing to cover a door when a trip alarm goes off.
 
 const ARRIVE_DISTANCE := 0.35
 const AIM_REROLL_TIME := 0.4
@@ -10,6 +14,9 @@ const STUCK_TIME := 0.6
 const SIDESTEP_TIME := 0.5
 ## How close to the hostage an Entry bot stands to secure it.
 const SECURE_DISTANCE := 1.5
+## Where a bot stands, inside the room, to place a gadget on a door: clear of the door's swing.
+const GADGET_STANCE := 1.6
+const ALERT_TIME := 4.0
 
 var player: Player
 var game: Match
@@ -26,6 +33,12 @@ var _sidestep_left := 0.0
 var _sidestep_dir := 1.0
 var _last_position := Vector3.ZERO
 var _watch_time := 0.0
+var _reaction := 0.0
+## Gadget jobs for this setup: [{door, slot}]. Rebuilt whenever the hostage room changes.
+var _plan: Array[Dictionary] = []
+var _plan_room := -1
+var _alert_door: Door
+var _alert_left := 0.0
 
 
 func _init(the_player: Player, the_game: Match) -> void:
@@ -41,6 +54,15 @@ func _on_phase_changed(phase: Match.Phase) -> void:
 		_goal = Vector3.INF
 		_seen_for = 0.0
 		_sidestep_left = 0.0
+		_plan_room = -1
+		_alert_left = 0.0
+
+
+## A trip alarm went off: guards turn to cover that door for a few seconds.
+func hear_alarm(door: Door) -> void:
+	if player.team == Team.Id.SUSPECTS:
+		_alert_door = door
+		_alert_left = ALERT_TIME
 
 
 func think(delta: float) -> void:
@@ -48,8 +70,16 @@ func think(delta: float) -> void:
 	input.move = Vector2.ZERO
 	input.fire = false
 	input.interact = false
+	input.gadget_1 = false
+	input.gadget_2 = false
 	_pulse = not _pulse
 	if player.is_dead or game.phase == Match.Phase.WAITING:
+		return
+
+	# Blinded, a bot cannot see anyone, but it still fires along the way it was facing.
+	if player.flash_left > 0.0 and game.phase == Match.Phase.ACTION:
+		if _shot_is_safe():
+			input.fire = true if player.arsenal.weapon().stats().auto else _pulse
 		return
 
 	var enemy := _visible_enemy() if game.phase == Match.Phase.ACTION else null
@@ -91,15 +121,89 @@ func _think_suspect(delta: float) -> void:
 	if game.hostage.state == Hostage.State.FOLLOWING:
 		_walk_to(game.hostage.global_position, delta)
 		return
-	var posts: Array = room.posts
+	if game.phase == Match.Phase.SETUP and _do_gadget_job(room, delta):
+		return
+	var posts: Array = room.layouts[game.post_layout]
 	var post: Vector3 = posts[game.players_on(player.team).find(player) % posts.size()]
 	if not _walk_to(post, delta):
 		return
-	# At the post: sweep between the room's doorways.
-	var doorways := game.house.entrances(room.room)
-	_watch_time += delta
-	var watching: Vector3 = doorways[int(_watch_time / WATCH_SWITCH_TIME) % doorways.size()]
+	# At the post: sweep between the room's doorways, unless an alarm says where to look.
+	var watching: Vector3
+	if _alert_left > 0.0 and _alert_door != null:
+		_alert_left -= delta
+		watching = _alert_door.side_point(0.0, 0.0, 0.0)
+	else:
+		var doorways := game.house.entrances(room.room)
+		_watch_time += delta
+		watching = doorways[int(_watch_time / WATCH_SWITCH_TIME) % doorways.size()]
 	_turn_toward(watching + Vector3.UP * 1.4, delta)
+
+
+## Setup-time job: stand inside the room facing one of its doors, shut it if it is open, and
+## place a gadget on it. Returns true while there is still a job to do.
+func _do_gadget_job(room: Dictionary, delta: float) -> bool:
+	if _plan_room != game.hostage_room:
+		_plan_room = game.hostage_room
+		_plan = _make_plan(room)
+	if _plan.is_empty():
+		return false
+	var door: Door = _plan[0].door
+	var inside := _inside_side(door, room.room)
+	if not _walk_to(_stance_for(door, inside, room.room), delta):
+		return true
+	var off := _turn_toward(door.panel_point(), delta)
+	if off > deg_to_rad(3.0) or player.aimed_interactable() != door or not door.is_settled():
+		return true
+	# A wedge needs a shut door; an alarm does not.
+	if _plan[0].slot == player.gadgets.find("wedge") and door.state != Door.State.CLOSED:
+		player.input.interact = _pulse
+		return true
+	if _plan[0].slot == 0:
+		player.input.gadget_1 = true
+	else:
+		player.input.gadget_2 = true
+	_plan.pop_front()
+	return true
+
+
+## Which jobs this bot does: the first Suspect wedges a door, the second sets an alarm,
+## each only some of the time so rounds differ.
+func _make_plan(room: Dictionary) -> Array[Dictionary]:
+	var plan: Array[Dictionary] = []
+	var doors := game.house.doors_of(room.room)
+	if doors.is_empty():
+		return plan
+	var index := game.players_on(player.team).find(player)
+	var wedge := player.gadgets.find("wedge")
+	var alarm := player.gadgets.find("alarm")
+	if index == 0 and wedge >= 0:
+		# A one-door room is sealed by a wedge, so bots do it less often there.
+		if rng.randf() < Cfg.bot_wedge_chance * (1.0 if doors.size() > 1 else 0.5):
+			plan.append({door = doors[rng.randi() % doors.size()], slot = wedge})
+	elif index == 1 and alarm >= 0:
+		if rng.randf() < Cfg.bot_alarm_chance:
+			plan.append({door = doors[rng.randi() % doors.size()], slot = alarm})
+	return plan
+
+
+## Where to stand to work on `door`. The two guards use different spots, so they never both
+## crowd the doorway, and the spot is always on the inside, out of the door's swing.
+func _stance_for(door: Door, inside: float, room_name: String) -> Vector3:
+	var index := game.players_on(player.team).find(player)
+	var lateral := 0.0 if index <= 0 else 0.9
+	for sign: float in [-1.0, 1.0]:
+		var spot := door.to_global(Vector3(door.width * 0.5 + lateral * sign, 0.0, inside * GADGET_STANCE))
+		if lateral == 0.0 or game.house.region_at(spot + Vector3.UP * 0.1) == room_name:
+			return spot
+	return door.side_point(inside, GADGET_STANCE, 0.0)
+
+
+## +1 or -1: the side of `door` that is inside `room_name`.
+func _inside_side(door: Door, room_name: String) -> float:
+	for side: float in [1.0, -1.0]:
+		if game.house.region_at(door.side_point(side, 1.0, 0.1)) == room_name:
+			return side
+	return 1.0
 
 
 # --- Combat ---
@@ -132,8 +236,12 @@ func _engage(enemy: Player, delta: float) -> void:
 		_aim_error = Vector2(rng.randf_range(-error, error), rng.randf_range(-error, error))
 	var aim_at := _chest_of(enemy) if _can_see(_chest_of(enemy)) else enemy.head.global_position
 	var off_target := _turn_toward(aim_at, delta, _aim_error)
+	if _seen_for == 0.0:
+		var to := aim_at - player.camera.global_position
+		var already_aimed := rad_to_deg((-player.camera.global_basis.z).angle_to(to)) <= Cfg.bot_preaim_deg
+		_reaction = Cfg.bot_preaim_reaction_time if already_aimed else Cfg.bot_reaction_time
 	_seen_for += delta
-	if _seen_for < Cfg.bot_reaction_time or off_target > deg_to_rad(4.0) or not _shot_is_safe():
+	if _seen_for < _reaction or off_target > deg_to_rad(4.0) or not _shot_is_safe():
 		return
 	var gun := player.arsenal.weapon()
 	player.input.fire = true if gun.stats().auto else _pulse
@@ -197,7 +305,8 @@ func _walk_to(goal: Vector3, delta: float) -> bool:
 		# that is stopped against this bot's own body would wait for the bot in return.
 		_turn_toward(door.panel_point(), delta)
 		if player.aimed_interactable() == door:
-			player.input.interact = _pulse
+			# Holding the key forces a wedged door (slow and loud); tapping opens a normal one.
+			player.input.interact = true if door.wedged else _pulse
 		return false
 
 	if _sidestep_left > 0.0:

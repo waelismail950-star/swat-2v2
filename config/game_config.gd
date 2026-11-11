@@ -56,6 +56,9 @@ var interact_range := 2.2
 var max_health := 100.0
 ## Damage multiplier for a hit on the head zone.
 var headshot_mult := 4.0
+## True: any hit on the head kills outright, whatever the weapon, armor or range
+## (a single shotgun pellet included). False: headshot_mult applies instead.
+var headshot_lethal := true
 ## After sprinting stops, how long before a weapon can fire.
 var sprint_fire_delay := 0.25
 var weapon_swap_time := 0.45
@@ -126,6 +129,13 @@ var hostage_follow_radius := 4.0
 # --- Bots (local test mode) ---
 ## Seconds a bot must see an enemy before it may fire.
 var bot_reaction_time := 0.45
+## Reaction time for an enemy that appears already inside this many degrees of the bot's aim:
+## a guard holding an angle punishes a sloppy peek far faster than one who has to turn.
+var bot_preaim_deg := 7.0
+var bot_preaim_reaction_time := 0.12
+## Chance per round that a Suspect bot wedges a door of the hostage room / sets a trip alarm.
+var bot_wedge_chance := 0.6
+var bot_alarm_chance := 0.7
 var bot_aim_error_deg := 2.5
 var bot_turn_speed_deg := 300.0
 var bot_fov_deg := 110.0
@@ -142,9 +152,9 @@ var flash_fuse := 1.5
 ## Beyond this distance from the bang, nobody is affected.
 var flash_radius := 9.0
 ## Seconds of blindness at point-blank range, facing the bang.
-var flash_duration := 3.5
+var flash_duration := 2.5
 ## Blindness multiplier when facing away from the bang.
-var flash_look_away_mult := 0.4
+var flash_look_away_mult := 0.2
 var breach_fuse := 2.5
 ## A breaching charge stuns (flashes) players this close to the door, with line of sight.
 var breach_stun_radius := 3.5

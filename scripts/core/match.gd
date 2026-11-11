@@ -27,6 +27,8 @@ var phase := Phase.WAITING
 var time_left := 0.0
 ## Index into House.HOSTAGE_ROOMS.
 var hostage_room := 0
+## Which of the room's guard layouts the Suspect bots use this round. Bots run on the server only.
+var post_layout := 0
 var last_winner := Team.Id.ENTRY
 var last_reason := Reason.TIME_UP
 var rng := RandomNumberGenerator.new()
@@ -125,6 +127,7 @@ func _start_round() -> void:
 		player.respawn(Transform3D(Basis(Vector3.UP, yaw), spawns[placed[team] % spawns.size()]))
 		placed[team] += 1
 	_set_phase(Phase.SETUP, Cfg.setup_time)
+	post_layout = rng.randi_range(0, House.GUARD_LAYOUTS - 1)
 	choose_hostage_room(rng.randi_range(0, House.HOSTAGE_ROOMS.size() - 1))
 
 

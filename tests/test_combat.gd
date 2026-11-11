@@ -91,6 +91,35 @@ func test_safe_weapons_cannot_fire() -> void:
 	check(shots_fired == 1, "fires once live")
 
 
+func test_any_head_hit_is_lethal_even_one_weak_pellet() -> void:
+	Cfg.weapons.shotgun.pellets = 1
+	Cfg.weapons.shotgun.damage = 1.0
+	var target := _spawn(RANGE)
+	await _select(2)
+	await look_at_point(shooter, RANGE + Vector3(0, HEAD_Y, 0))
+	await _pull_trigger()
+	check(target.is_dead, "one pellet doing 1 damage to the head kills (health %.0f)" % target.health)
+
+
+func test_headshot_is_lethal_at_any_range_and_through_armor() -> void:
+	Cfg.weapons.carbine.falloff_min = 0.1
+	var far := _spawn(Vector3(0, 0, -45))
+	far.team = Team.Id.ENTRY
+	await look_at_point(shooter, Vector3(0, HEAD_Y, -45))
+	await _pull_trigger()
+	check(far.is_dead, "armored target at 45 m, where damage has fallen off, still dies to the head (health %.0f)" % far.health)
+
+
+func test_headshot_lethality_can_be_turned_off_in_the_config() -> void:
+	Cfg.headshot_lethal = false
+	Cfg.headshot_mult = 2.0
+	var target := _spawn(RANGE)
+	await look_at_point(shooter, RANGE + Vector3(0, HEAD_Y, 0))
+	await _pull_trigger()
+	check_near(target.health, Cfg.max_health - Cfg.weapons.carbine.damage * 2.0, 0.01, "the multiplier applies instead")
+	check(not target.is_dead, "and one head hit no longer kills")
+
+
 func test_headshot_kills_and_reports_killer() -> void:
 	var target := _spawn(RANGE)
 	var report := {}

@@ -279,7 +279,7 @@ func take_hit(damage: float, zone: Hitbox.Zone, shooter: Node) -> bool:
 	if is_dead:
 		return false
 	if zone == Hitbox.Zone.HEAD:
-		damage *= Cfg.headshot_mult
+		damage = maxf(damage * Cfg.headshot_mult, health if Cfg.headshot_lethal else 0.0)
 	elif team == Team.Id.ENTRY:
 		damage *= Cfg.entry_body_damage_mult
 	health = maxf(health - damage, 0.0)

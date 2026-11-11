@@ -52,6 +52,10 @@ func build(participants: Array) -> void:
 	sounds.name = "Sounds"
 	add_child(sounds)
 	game.phase_changed.connect(_on_phase_changed)
+	gadgets.alarm_raised.connect(func(door: Door) -> void:
+		for player: Player in players.values():
+			if player.brain != null:
+				player.brain.hear_alarm(door))
 	if multiplayer.is_server():
 		gadgets.serve()
 		_relay_server_decisions()
