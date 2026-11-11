@@ -16,6 +16,8 @@ signal loadout_requested(player: Player, index: int)
 signal kit_changed(player: Player)
 signal peek_changed(player: Player)
 signal flashed(player: Player, seconds: float)
+## This player's shot was just drawn on this machine (fires on every machine).
+signal shots_shown(player: Player)
 
 ## Eye height of a downed player's camera.
 const DOWNED_EYE := 0.35
@@ -320,6 +322,7 @@ func show_shots(from: Vector3, shots: Array) -> void:
 	var muzzle := from + camera.global_basis * Vector3(0.15, -0.12, -0.5)
 	for shot: Dictionary in shots:
 		ShotFx.tracer(get_parent(), muzzle, shot.to, shot.hit)
+	shots_shown.emit(self)
 
 
 func _on_fired(_weapon: Weapon, from: Vector3, shots: Array) -> void:

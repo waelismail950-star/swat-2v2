@@ -494,6 +494,43 @@ func test_client_loadout_choice_and_door_camera() -> void:
 	check(_on_host(operator).peek_door == null and host_door.scope_side == 0.0, "putting it away removes the lens on the host")
 
 
+func test_client_hears_what_the_host_does() -> void:
+	await _start_match()
+	await _go_live()
+	var heard: Array[String] = []
+	client.world.sounds.emitted.connect(func(kind: String, _at: Vector3) -> void: heard.append(kind))
+	var operator := host.world.local_player
+	var host_door := host.world.house.doors["Foyer-Living"]
+
+	await _place(operator, Vector3(-14, 0, 20))
+	heard.clear()
+	operator.input.move = Vector2(0, 1)
+	await wait(2.0)
+	operator.input.move = Vector2.ZERO
+	check(heard.count("step_walk") >= 5, "footsteps: %s" % [heard])
+
+	heard.clear()
+	operator.input.fire = true
+	await wait(0.05)
+	operator.input.fire = false
+	await wait(0.3)
+	check(heard.has("shot_carbine"), "gunshot: %s" % [heard])
+
+	host_door.set_wedged(true)
+	await _place(operator, Vector3(-0.7, 0, 2.5), PI / 2)
+	heard.clear()
+	operator.input.interact = true
+	await wait(1.5)
+	check(heard.count("force") >= 2, "someone forcing a door: %s" % [heard])
+	await wait(Cfg.wedge_force_time - 1.2)
+	operator.input.interact = false
+	await wait(0.2)
+	heard.clear()
+	operator.press_interact()
+	await wait(0.4)
+	check(heard.has("door_open"), "the door opening: %s" % [heard])
+
+
 func test_a_client_that_leaves_is_replaced_by_a_bot() -> void:
 	await _start_match()
 	var id := String(client.world.local_player.name)

@@ -1,6 +1,6 @@
 # Known issues and unfinished work
 
-Updated at Milestone 6.
+Updated at Milestone 7.
 
 ## Decisions waiting on you
 - **Best-of-5 cannot be side-fair.** With one swap after round 2, one roster plays Entry twice and the other up to three times. If one side turns out stronger, that matters. Options: keep it; swap every round; or play best-of-6 with a tiebreak. `swap_sides_after_round` is in the config.
@@ -8,6 +8,7 @@ Updated at Milestone 6.
 - **Whoever shoots the hostage loses,** instead of the hostage dying always being a Suspect win. See DESIGN.md.
 
 ## Not verified by a human yet
+- **Nobody has heard the game.** There is no audio device here. Tests prove which sounds are made, how loud the model says they are, where they seem to come from and that the generated audio is valid and not silent. Whether it sounds right, whether direction is readable in headphones, and whether the volumes are sensible are all untested.
 - **Multiplayer has only been run on one machine.** Automated tests cover a host and a client in one process, and two separate processes over localhost complete a whole match and agree on every round. It has not been run over a real LAN or the internet, and never with latency or packet loss.
 - **The menu and lobby have never been clicked by a person.** They were checked by code and by rendered screenshots.
 - **Gadget feel and balance.** Throw arc, fuse lengths, blind durations and the 4 s wedge force time are first guesses.
@@ -22,7 +23,12 @@ Updated at Milestone 6.
 - **Side balance.** In a 16-round bot-versus-bot sample Entry won 10 and Suspects 6. Bots do not use technique, so this says little about human play.
 
 ## Limitations
-- **Gadgets are silent.** The flashbang landing, the breaching charge's fuse, forcing a wedged door and the trip alarm are all meant to be heard; until M7 they are visual only. The trip alarm currently alerts Suspects with HUD text.
+- **All audio is placeholder:** synthesised noise bursts and beeps, no recorded sounds, no music, no voices.
+- **Reloading, weapon swapping and securing the hostage are silent.** So is a flashbang bouncing; only the throw and the bang are heard.
+- **Sound paths use doorway waypoints, not true acoustics.** A sound heard through doors comes from the first doorway on your side. Two sounds in different places behind the same door seem to come from the same spot.
+- **Walls and floors all leak the same amount.** One wall or three walls between you and a sound are treated alike.
+- **Bots are deaf.** They react only to what they see.
+- **Your own footsteps are played quietly** at a fixed level so you can tell which kind you are making.
 - **Bots do not use gadgets,** though they are blinded by flashes like anyone else.
 - **Flashbangs pass through players** and only bounce off walls, floors and doors.
 - **The trip alarm sits right in front of the door camera's lens** and hides the middle of its view. That reveals the alarm, which is intended, but it also hides part of the room.
@@ -47,7 +53,6 @@ Updated at Milestone 6.
 - **Spraying a carbine at a chest about 12 m away walks the rounds into the head.** Recoil levels off roughly one head-height above the aim point at that distance. Revisit in the balance pass (M8).
 - **The lean pose looks crude.** The head shifts fully, the torso half, the legs not at all. The hitboxes match what is drawn, so it is fair, just ugly.
 - **No aim-down-sights.** Hip fire only, by design for now.
-- **No audio.** Gunfire, footsteps and doors are silent until M7.
 - **Lean and crouch are hold-only.** No toggle option.
 - **Mouse sensitivity is a config value,** not an in-game setting.
 - **Stairs are ramps under the hood.** The controller does not step up ledges.
@@ -56,4 +61,4 @@ Updated at Milestone 6.
 - **Cosmetic:** thin light leaks under doors, jagged shadow edges, floor plans in docs/img rendered on a software renderer.
 
 ## Not started
-Sound (Milestone 7), balance pass (8), hostage self-escape (9, locked).
+Balance pass (Milestone 8), hostage self-escape (9, locked).

@@ -145,3 +145,27 @@ var alarm_radius := 1.2
 var door_camera_fov_deg := 100.0
 ## How far the door camera can be panned to either side.
 var door_camera_pan_deg := 60.0
+
+# --- Sound ---
+## How far each sound carries in open air (meters). It fades to nothing at this distance.
+var noise_radius := {
+	"step_crouch": 4.0, "step_walk": 10.0, "step_sprint": 18.0,
+	"door_open": 12.0, "door_crack": 5.0, "door_close": 9.0,
+	"shot_carbine": 60.0, "shot_pistol": 50.0, "shot_shotgun": 60.0,
+	"throw": 8.0, "bang": 60.0, "fuse": 12.0, "force": 16.0, "alarm": 30.0,
+}
+## Loudness multiplier for each door a sound passes through on its way to the listener.
+var sound_closed_door_mult := 0.35
+var sound_cracked_door_mult := 0.75
+## Loudness multiplier for sound going straight through a wall or floor.
+var sound_wall_mult := 0.2
+## Distance travelled per footstep.
+var stride_crouch := 0.6
+var stride_walk := 0.8
+var stride_sprint := 1.1
+## Moving faster than this fraction of walk speed counts as sprinting for footsteps.
+var sprint_step_threshold := 1.2
+## Seconds between beeps of a breaching charge, and between thumps when forcing a door.
+var fuse_beep_interval := 0.4
+var force_thump_interval := 0.5
+var master_volume := 1.0

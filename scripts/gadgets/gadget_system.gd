@@ -7,6 +7,8 @@ extends Node
 signal alarm_raised(door: Door)
 ## Something went bang here (flashbang or breaching charge).
 signal banged(at: Vector3)
+## A flashbang was just thrown from here.
+signal thrown(at: Vector3)
 
 const BANG_LIGHT_TIME := 0.12
 
@@ -99,6 +101,7 @@ func _throw(origin: Vector3, direction: Vector3) -> void:
 	grenade.velocity = (direction + Vector3.UP * 0.15).normalized() * Cfg.flash_throw_speed
 	grenade.fuse_left = Cfg.flash_fuse
 	grenade.detonated.connect(_on_detonated)
+	thrown.emit(grenade.global_position)
 
 
 func _on_detonated(grenade: Flashbang) -> void:
@@ -182,8 +185,11 @@ func _show_bang(at: Vector3) -> void:
 
 @rpc("authority", "call_remote", "unreliable_ordered")
 func _net_grenade(id: int, at: Vector3) -> void:
-	var grenade := _grenades[id] if _grenades.has(id) else _add_grenade(id)
+	var is_new := not _grenades.has(id)
+	var grenade := _add_grenade(id) if is_new else _grenades[id]
 	grenade.global_position = at
+	if is_new:
+		thrown.emit(at)
 
 
 @rpc("authority", "call_remote", "reliable")

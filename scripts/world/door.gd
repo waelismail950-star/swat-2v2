@@ -15,6 +15,8 @@ signal state_changed(door: Door)
 signal alarm_tripped(door: Door)
 ## A breaching charge went off. `charge_side` is the side it was placed on.
 signal breached(door: Door, charge_side: float)
+## The door made a noise ("door_open", "door_crack", "door_close"). Fires on every machine.
+signal sounded(kind: String)
 
 const PANEL_THICKNESS := 0.05
 const EDGE_GAP := 0.03
@@ -44,6 +46,8 @@ var charge_side := 0.0
 var alarm_side := 0.0
 ## Side a door camera's lens is poking out on.
 var scope_side := 0.0
+## Someone is forcing the wedge right now.
+var forcing := false
 
 var _panel: AnimatableBody3D
 ## Thinner than the real panel so a body merely touching the door does not count as in the way.
@@ -120,7 +124,7 @@ func on_crack(player: Player) -> void:
 		interact(Action.TOGGLE_CRACK, player.global_position)
 
 
-## Holding interact on a wedged door forces it. Anyone can; it is slow and (from M7) loud.
+## Holding interact on a wedged door forces it. Anyone can; it is slow and loud.
 func on_interact_hold(_player: Player, delta: float) -> void:
 	if not wedged:
 		return
@@ -128,6 +132,9 @@ func on_interact_hold(_player: Player, delta: float) -> void:
 	_last_force_frame = Engine.get_physics_frames()
 	if _force_progress >= Cfg.wedge_force_time:
 		set_wedged(false)
+	elif not forcing:
+		forcing = true
+		_changed()
 
 
 ## Applies a door action. `from` is where the operator stands (world space). A wedged door ignores it.
@@ -137,7 +144,7 @@ func interact(action: Action, from: Vector3) -> void:
 	var next := _next_state(action)
 	if next != State.CLOSED:
 		swing_sign = _pick_swing_sign(from)
-	state = next
+	_set_state(next)
 	state_changed.emit(self)
 
 
@@ -151,6 +158,7 @@ func reset(lock: bool) -> void:
 	charge_side = 0.0
 	alarm_side = 0.0
 	scope_side = 0.0
+	forcing = false
 	_fuse_left = 0.0
 	_force_progress = 0.0
 	_show_gadgets()
@@ -174,6 +182,7 @@ func is_shut() -> bool:
 
 func set_wedged(value: bool) -> void:
 	wedged = value
+	forcing = false
 	_force_progress = 0.0
 	_changed()
 
@@ -208,13 +217,14 @@ func take_hit(_damage: float, _zone: Hitbox.Zone, _shooter: Node) -> bool:
 ## Everything a client needs to mirror this door.
 func snapshot() -> Dictionary:
 	return {state = state, swing = swing_sign, wedged = wedged, charge = charge_side,
-			alarm = alarm_side, scope = scope_side}
+			alarm = alarm_side, scope = scope_side, forcing = forcing}
 
 
 ## Applies the server's snapshot (clients only). The panel swings to match on its own.
 func set_from_server(data: Dictionary) -> void:
-	state = data.state
 	swing_sign = data.swing
+	_set_state(data.state)
+	forcing = data.forcing
 	wedged = data.wedged
 	charge_side = data.charge
 	alarm_side = data.alarm
@@ -257,6 +267,8 @@ func _run_gadgets(delta: float) -> void:
 	# Letting go of a wedged door loses the progress made forcing it.
 	if _force_progress > 0.0 and Engine.get_physics_frames() - _last_force_frame > 1:
 		_force_progress = 0.0
+		forcing = false
+		_changed()
 
 	if charge_side != 0.0:
 		_fuse_left -= delta
@@ -264,7 +276,8 @@ func _run_gadgets(delta: float) -> void:
 			var side := charge_side
 			charge_side = 0.0
 			wedged = false
-			state = State.OPEN
+			forcing = false
+			state = State.OPEN  # no creak: the bang covers it
 			swing_sign = side  # blown away from the charge
 			_changed()
 			breached.emit(self, side)
@@ -286,6 +299,14 @@ func _entry_operator_near(point: Vector3) -> bool:
 		if player != null and player.team == Team.Id.ENTRY:
 			return true
 	return false
+
+
+## Changes state and makes the matching noise.
+func _set_state(next: State) -> void:
+	if next == state:
+		return
+	state = next
+	sounded.emit(["door_close", "door_crack", "door_open"][state])
 
 
 func _changed() -> void:

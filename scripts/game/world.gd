@@ -10,6 +10,7 @@ var house: House
 var hostage: Hostage
 var game: Match
 var gadgets: GadgetSystem
+var sounds: SoundSystem
 ## Node name -> player.
 var players: Dictionary[String, Player] = {}
 ## The player this machine controls (null on a machine that only runs bots).
@@ -47,6 +48,9 @@ func build(participants: Array) -> void:
 	gadgets = GadgetSystem.new(self)
 	gadgets.name = "Gadgets"
 	add_child(gadgets)
+	sounds = SoundSystem.new(self)
+	sounds.name = "Sounds"
+	add_child(sounds)
 	game.phase_changed.connect(_on_phase_changed)
 	if multiplayer.is_server():
 		gadgets.serve()

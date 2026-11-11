@@ -3,7 +3,7 @@
 2v2 asymmetric hostage rescue in one two-floor house. Entry Team vs Suspects, best of 5.
 Guiding rule: real technique should win because of geometry and mechanics, never because a rule forces it.
 
-Status: **Milestone 6 of 10** (controller, greybox house, doors, weapons, rounds and hostage, bots, LAN multiplayer, gadgets). Everything below describes what is built, not what is planned.
+Status: **Milestone 7 of 10** (controller, greybox house, doors, weapons, rounds and hostage, bots, LAN multiplayer, gadgets, sound). Everything below describes what is built, not what is planned.
 
 ## Run it
 
@@ -52,6 +52,7 @@ Options after `--` skip the menu, for example `godot -- --solo`:
 ```
 config/game_config.gd   every tunable (autoload `Cfg`)
 scenes/                 main.tscn, player/player.tscn
+scripts/audio/          sound propagation and the generated placeholder sounds
 scripts/core/           match state machine, scoreboard, teams, physics layers
 scripts/gadgets/        gadget rules and the flashbang
 scripts/game/           world: builds a match's scene and replicates the server's decisions
@@ -94,7 +95,7 @@ Each entry: what it is, the behavior it pushes players toward, and what beats it
 ### Walk / sprint / crouch speeds
 - **What:** walk 3.2 m/s, sprint 5.4 m/s (forward only, not while crouched or leaning), crouch 1.7 m/s.
 - **Incentive:** speed and control are a trade; sprinting commits you to a direction and stance.
-- **Counter:** a sprinting player cannot lean or crouch, so a defender holding an angle sees the full body first. Sprint will also be loud and block firing once sound (M7) and weapons (M3) exist.
+- **Counter:** a sprinting player cannot lean, crouch or fire, is seen full-body by anyone holding the angle, and is heard 18 m away.
 
 ### No jump
 - **What:** there is no jump.
@@ -103,7 +104,7 @@ Each entry: what it is, the behavior it pushes players toward, and what beats it
 
 ### Crouch
 - **What:** capsule shrinks from 1.8 m to 1.15 m, eye drops with it. You cannot stand up while something solid is overhead.
-- **Incentive:** use low cover and (from M7) move quietly, at the cost of speed.
+- **Incentive:** use low cover and move quietly, at the cost of speed.
 - **Counter:** a crouched player is slow, so they lose any race to a doorway or to the hostage.
 
 ### Lean (slicing the pie)
@@ -170,7 +171,7 @@ Each entry: what it is, the behavior it pushes players toward, and what beats it
 ### Magazines and reloads
 - **What:** unlimited reserve ammo, but a reload takes 1.6 to 2.8 s and is abandoned if you swap weapons. Swapping takes 0.45 s.
 - **Incentive:** reload behind cover, count rounds, and use the sidearm when the primary runs dry mid-fight.
-- **Counter:** push a player you heard run dry (meaningful once sound exists in M7).
+- **Counter:** a reloading player cannot shoot back for up to 2.8 s. (Reloads are not audible to others yet.)
 
 ### Shotgun versus carbine
 - **What:** the shotgun kills in one blast at doorway range, armor included, but needs two beyond about 4 m and has a 0.9 s gap between shots. The carbine kills in 0.2 s at any range in the house.
@@ -215,6 +216,39 @@ Each entry: what it is, the behavior it pushes players toward, and what beats it
 - **What:** if 180 s pass, Suspects win.
 - **Incentive:** Entry cannot wait outside for a mistake; Suspects are rewarded for staying alive and holding ground near the hostage rather than hunting.
 - **Counter:** a Suspect who hides far from the hostage keeps the clock but gives up the room, and an unopposed rescue takes only 15-25 s.
+
+## Sound
+
+All audio is placeholder, generated in code (noise bursts and tones). What matters is who can hear what.
+
+### Footsteps depend on how you move
+- **What:** one step per stride. Crouch-walking carries 4 m, walking 10 m, sprinting 18 m. Standing still is silent.
+- **Incentive:** approach a held room at a crouch; sprint only when being heard does not matter.
+- **Counter:** crouch-walking is half the speed of walking, so quiet costs time on the clock.
+
+### Sound travels through doorways and is cut by doors
+- **What:** sound reaches you along the walking route. Every closed door on the way cuts it to 35 %, a cracked door to 75 %, an open door not at all. What gets through is played from the nearest doorway on your side, so you hear which door it came from.
+- **Incentive:** keep doors shut to hide your movement; crack a door to listen as well as look.
+- **Counter:** a shut door muffles in both directions. Shutting yourself in to stay quiet also deafens you.
+
+### Walls and floors leak a little
+- **What:** a sound also travels in a straight line through structure at 20 %, muffled. Whichever of the two paths is louder is what you hear.
+- **Incentive:** stop and listen: footsteps directly above or beyond a wall give away a room.
+- **Counter:** crouch-walking overhead is nearly inaudible below.
+
+### Everything loud announces itself
+| Sound | Carries | What it tells the other side |
+| --- | --- | --- |
+| Door opening / closing / cracking | 12 m / 9 m / 5 m | which door, and that cracking is the quiet option |
+| Gunshot | 50-60 m | where the fight is; heard through the whole house |
+| Flashbang thrown | 8 m | about 1.5 s of warning to look away |
+| Flashbang or charge going off | 60 m | which room was just hit |
+| Breaching charge fuse (beeps) | 12 m | which door is about to blow, for 2.5 s |
+| Forcing a wedged door (thumps) | 16 m | which door is being forced, for 4 s |
+| Trip alarm | 30 m | to Suspects: that door. To Entry: you have been detected |
+
+- **Incentive:** every loud option trades secrecy for speed or force.
+- **Counter:** each of these sounds is the counter to the action that makes it.
 
 ## Gadgets
 
@@ -328,10 +362,11 @@ The shooter's own machine draws its tracers immediately; damage, hit markers and
 - Anything you can press F on is a node with `interact_prompt(player)` and `on_interact(player)`, optionally `on_interact_hold` and `on_crack`. Doors, hostage markers and the hostage all use it; the HUD prompt comes from the same call.
 - Routes for bots and the hostage come from a small waypoint graph (`NavGraph`) generated from the door table plus hand-placed stair and ramp points. Rooms are convex, so any two points in a room connect directly. The hostage's route from each room is therefore fixed and predictable.
 - Respawned players hold still for two physics ticks: teleports reach the physics server a tick late, and moving before that makes players collide with where others used to stand.
+- Sound needs no network messages: each machine derives every sound from state it already has (player positions and stance, door states, shots it is shown, gadget events) and runs the propagation model for its own listener.
 - Renderer is GL Compatibility: it runs on weak laptops and is enough for greybox.
 
 ## Tunables
 
-All in `config/game_config.gd`. Current groups: player body, movement, lean, look, doors, combat (including the per-weapon table), teams, match, hostage, bots, gadgets.
+All in `config/game_config.gd`. Current groups: player body, movement, lean, look, doors, combat (including the per-weapon table), teams, match, hostage, bots, gadgets, sound.
 
 Map dimensions are not tunables; they live in `scripts/world/house.gd`.
