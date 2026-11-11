@@ -3,7 +3,7 @@
 2v2 asymmetric hostage rescue in one two-floor house. Entry Team vs Suspects, best of 5.
 Guiding rule: real technique should win because of geometry and mechanics, never because a rule forces it.
 
-Status: **Milestone 3 of 10** (controller, greybox house, doors, weapons). Everything below describes what is built, not what is planned.
+Status: **Milestone 4 of 10** (controller, greybox house, doors, weapons, rounds and hostage, local bots). Everything below describes what is built, not what is planned.
 
 ## Run it
 
@@ -13,8 +13,7 @@ Requires Godot 4.4.1.
 | --- | --- |
 | Play the current build | `godot` from the repo root (or open the project in the editor and press F5) |
 
-The current build is a sandbox: you spawn outside the front door with all three weapons, and six red dummy targets stand around the house. Dummies and you respawn 3 s after going down.
-| Run all tests | `./run_tests.sh` |
+The current build is local test mode: you and one bot against two bots, full best-of-5. Your side plays Entry for rounds 1-2 and Suspects from round 3. If you go down you watch through your teammate's eyes.
 
 On Windows, or without bash, the test script is these two commands:
 
@@ -30,18 +29,37 @@ Exit code 0 means every test passed.
 ```
 config/game_config.gd   every tunable (autoload `Cfg`)
 scenes/                 main.tscn, player/player.tscn
-scripts/core/           shared constants (physics layers)
+scripts/core/           match state machine, scoreboard, teams, physics layers
+scripts/ai/             bots for local test mode
 scripts/combat/         weapons, hit resolution, hitboxes, shot visuals
 scripts/player/         controller, input struct, visible body, first-person gun
 scripts/ui/             HUD
-scripts/world/          house (map data and builder), door, greybox helper
+scripts/world/          house (map data and builder), door, hostage, hostage markers, waypoint graph
 tests/                  headless runner and test_*.gd
 docs/                   this file, KNOWN_ISSUES.md
 ```
 
 ## Controls
 
-WASD move, Shift sprint, Ctrl or C crouch (hold), Q/E lean (hold), mouse look, left click fire, R reload, 1/2/3 weapon, F open/close door, V crack door, Esc frees the mouse, click recaptures it.
+WASD move, Shift sprint, Ctrl or C crouch (hold), Q/E lean (hold), mouse look, left click fire, R reload, 1/2 weapon, F interact (doors, hostage marker; hold on the hostage to secure), V crack door, Esc frees the mouse, click recaptures it.
+
+## Round flow
+
+1. **Setup (25 s).** Suspects spawn in the Foyer; the hostage starts in a random one of four rooms. A Suspect can move it by pressing F on the yellow marker in another candidate room. Entry spawns outside. Exterior doors are locked and all weapons are safe.
+2. **Live (180 s).** Doors unlock, weapons go hot. Entry finds the hostage and holds F on it for 3 s to secure it.
+3. **Extraction.** The secured hostage walks a fixed route to the extraction point outside (where Entry spawned), but only while a living Entry operator is within 4 m.
+4. **Round over (6 s),** then the next round. First roster to 3 wins takes the match; a new match starts 12 s later.
+
+| Round ends when | Winner |
+| --- | --- |
+| Hostage reaches the extraction point | Entry |
+| Both Suspects are down | Entry |
+| A Suspect shoots the hostage | Entry |
+| Both Entry operators are down | Suspects |
+| An Entry operator shoots the hostage | Suspects |
+| The clock runs out | Suspects |
+
+Sides swap once, after round 2 (configurable).
 
 ## Mechanics
 
@@ -89,10 +107,10 @@ Each entry: what it is, the behavior it pushes players toward, and what beats it
 ### Hitscan weapons, low time-to-kill
 - **What:** bullets land instantly along the crosshair. 100 health. Walls and doors stop bullets. Numbers at standstill, before tuning:
 
-| Weapon | Side | Body hits to kill | Head | Fire rate | Magazine | Reload |
+| Weapon | Carried by | Body hits to kill a Suspect / an Entry operator | Head | Fire rate | Magazine | Reload |
 | --- | --- | --- | --- | --- | --- | --- |
-| Carbine (auto) | Entry | 3 | 1 | ~630 rpm | 30 | 2.3 s |
-| Pistol (semi) | both | 4 | 1 | up to 400 rpm | 15 | 1.6 s |
+| Carbine (auto) | Entry | 3 / 4 | 1 | ~630 rpm | 30 | 2.3 s |
+| Pistol (semi) | both | 4 / 5 | 1 | up to 400 rpm | 15 | 1.6 s |
 | Shotgun (semi, 8 pellets) | Suspects | 1 inside ~3 m, 2 at ~5 m | pellets x4 | 67 rpm | 6 | 2.8 s |
 
 - **Incentive:** whoever sees first and is already aimed wins, so information and positioning decide fights, not reflex duels.
@@ -129,7 +147,7 @@ Each entry: what it is, the behavior it pushes players toward, and what beats it
 - **Counter:** push a player you heard run dry (meaningful once sound exists in M7).
 
 ### Shotgun versus carbine
-- **What:** the shotgun kills in one blast at doorway range but needs two beyond about 4 m and has a 0.9 s gap between shots. The carbine kills in 0.2 s at any range in the house.
+- **What:** the shotgun kills in one blast at doorway range, armor included, but needs two beyond about 4 m and has a 0.9 s gap between shots. The carbine kills in 0.2 s at any range in the house.
 - **Incentive:** Suspects with shotguns want to fight at doorways and corners; Entry wants to fight down halls and from outside the room.
 - **Counter:** each weapon loses at the other's range, and a missed shotgun blast is a 0.9 s opening.
 
@@ -140,6 +158,47 @@ Each entry: what it is, the behavior it pushes players toward, and what beats it
 
 ### Going down
 - **What:** at 0 health a player becomes a flat marker on the floor, stops blocking movement and bullets, and their camera drops to floor level. Nothing graphic.
+
+### Sides are asymmetric
+- **What:** Entry carries carbine + pistol, moves at full speed and takes 20 % less body damage (light armor; headshots ignore it). Suspects carry shotgun + pistol and move 10 % slower.
+- **Incentive:** Entry wins on tempo and range, Suspects on position and close quarters.
+- **Counter:** each side's edge is the other's weakness: Entry is punished for walking into shotgun range, Suspects for being caught in a hall.
+
+### Setup phase
+- **What:** 25 s in which Suspects choose the hostage room and take positions; Entry is locked outside with weapons safe and no view in.
+- **Incentive:** Suspects plan a defence around a room; Entry plans an approach without knowing which room it is.
+- **Counter:** Entry's intel gadgets (M6) are the answer to not knowing; for now it is doors, sound of none, and guesswork.
+
+### The hostage is fragile, and whoever shoots it loses
+- **What:** one direct hit from any weapon kills the hostage. If Entry fired the shot, Suspects win the round; if a Suspect did, Entry wins.
+- **Incentive:** both sides must control their fire near the hostage. Entry cannot spray into the hostage room; Suspects cannot spray at an operator standing next to it.
+- **Counter:** Suspects can stand close to the hostage to make shots risky; Entry counters with angles, patience and headshots, since the kneeling hostage is only 1.2 m tall.
+- **Deviation from the brief:** the brief said the hostage dying is always a Suspect win. That makes "shoot the hostage at the start" the winning Suspect strategy, so the shooter's side loses instead.
+
+### Securing takes an uninterrupted 3 s
+- **What:** an Entry operator must stand within reach, look at the hostage and hold F for 3 s. Letting go or looking away resets it.
+- **Incentive:** clear the room first, or have a partner cover you; the securing operator cannot shoot.
+- **Counter:** a Suspect who survives nearby gets a free shot at a stationary operator.
+
+### Escort: the hostage only moves while an operator is close
+- **What:** the secured hostage walks at 2.4 m/s along a fixed route and stops whenever no living operator is within 4 m. It waits at closed doors. Players can walk through it.
+- **Incentive:** Entry has to leave the house as a group at walking pace, through known doors; Suspects get a last ambush on a predictable route.
+- **Counter:** Entry can clear the route first and open its doors in advance. Suspects cannot body-block the hostage, only stop the escorts.
+
+### The clock
+- **What:** if 180 s pass, Suspects win.
+- **Incentive:** Entry cannot wait outside for a mistake; Suspects are rewarded for staying alive and holding ground near the hostage rather than hunting.
+- **Counter:** a Suspect who hides far from the hostage keeps the clock but gives up the room, and an unopposed rescue takes only 15-25 s.
+
+## Bots (local test mode)
+
+Bots exist so the game can be tested without four people. They are not meant to be good.
+
+- They press the same inputs a player does: same movement, weapons, doors and interact key.
+- **Entry bots** walk to the hostage, open doors on the way, secure it and escort it out. **They cheat:** they know which room the hostage is in.
+- **Suspect bots** walk to a guard post in the hostage room and sweep between its doorways. If the hostage is taken they chase it.
+- All bots shoot enemies they can see inside a 110 degree field of view, after a 0.45 s reaction time, with 2.5 degrees of aim error. They hold fire if the hostage or a teammate is in the cone.
+- They do not lean, crouch, crack doors, use cover or coordinate. A careful human should beat them, which is the point.
 
 ## Map: the house
 
@@ -155,6 +214,8 @@ Floor plans (north is up): [ground floor](img/plan_ground.png), [upper floor](im
 - **Doors:** 12, all 1 m wide. No windows, so nobody outside can see in.
 
 Why one entry per floor: with both entries on the ground floor, every upstairs room would sit behind a single stair that two Suspects can hold until the clock runs out. This way every room has at least two approach routes, and the stairwell connects the two halls instead of gating a whole floor.
+
+Round locations: Entry spawns on the lawn south-east of the house, between the Front Door and the foot of the ramp; that spot is also the extraction point. Suspects spawn in the Foyer. Hostage rooms are Kitchen, Study, Master and Kids, with the hostage in the corner farthest from the hall.
 
 Sightline intent:
 - Each hall is a long corridor with doors on both sides, so crossing it is exposed to any cracked door.
@@ -172,10 +233,15 @@ Sightline intent:
 - `Arsenal` (a child of each player) owns trigger logic, ammo, spread and recoil, and resolves each shot by raycast. That resolution step is what moves to the server in M5.
 - Anything shootable exposes `take_hit(damage, zone, shooter)` and owns `Hitbox` areas that point back at it. The hostage will use the same interface.
 - Recoil is a view offset added on top of the player's look angles, so it never fights the mouse.
+- `Match` is the single authority on round state: phase, clock, score, hostage room, and who won and why. Everything else reports to it through signals (`Player.died`, `Hostage.killed`, `Hostage.extracted`). `Scoreboard` holds the pure score and side-swap rules.
+- The two groups of players are "rosters" 0 and 1 for the whole match; which roster is Entry changes at the swap.
+- Anything you can press F on is a node with `interact_prompt(player)` and `on_interact(player)`, optionally `on_interact_hold` and `on_crack`. Doors, hostage markers and the hostage all use it; the HUD prompt comes from the same call.
+- Routes for bots and the hostage come from a small waypoint graph (`NavGraph`) generated from the door table plus hand-placed stair and ramp points. Rooms are convex, so any two points in a room connect directly. The hostage's route from each room is therefore fixed and predictable.
+- Respawned players hold still for two physics ticks: teleports reach the physics server a tick late, and moving before that makes players collide with where others used to stand.
 - Renderer is GL Compatibility: it runs on weak laptops and is enough for greybox.
 
 ## Tunables
 
-All in `config/game_config.gd`. Current groups: player body, movement, lean, look, doors, combat (including the per-weapon table).
+All in `config/game_config.gd`. Current groups: player body, movement, lean, look, doors, combat (including the per-weapon table), teams, match, hostage, bots.
 
 Map dimensions are not tunables; they live in `scripts/world/house.gd`.

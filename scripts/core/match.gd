@@ -33,6 +33,7 @@ var rng := RandomNumberGenerator.new()
 func _init(the_house: House, the_hostage: Hostage) -> void:
 	house = the_house
 	hostage = the_hostage
+	rng.randomize()
 	hostage.killed.connect(_on_hostage_killed)
 	hostage.extracted.connect(func() -> void: _end_round(Team.Id.ENTRY, Reason.EXTRACTED))
 	for spot in house.hostage_spots:

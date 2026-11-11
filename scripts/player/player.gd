@@ -27,6 +27,8 @@ var display_name := ""
 ## Set for bots: fills `input` each tick instead of the keyboard.
 var brain: Bot
 
+## Physics ticks left during which the body holds still after a respawn.
+var _settle_ticks := 0
 var _interact_was_down := false
 var _crack_was_down := false
 
@@ -46,6 +48,10 @@ func _ready() -> void:
 	_collider.shape = _capsule
 	collision_mask = Layers.WORLD | Layers.PLAYER
 	floor_snap_length = 0.3
+	# Nothing in the game is a moving platform. Leaving these on lets a teleporting player
+	# (round reset) or a swinging door fling whoever it touches.
+	platform_floor_layers = 0
+	platform_wall_layers = 0
 	add_to_group(GROUP)
 	add_child(arsenal)
 	arsenal.fired.connect(_on_fired)
@@ -69,6 +75,9 @@ func respawn(at: Transform3D) -> void:
 	collision_layer = Layers.PLAYER
 	body.set_alive(true)
 	arsenal.refill_all()
+	# Teleports reach the physics server a tick late. Moving before then would collide with
+	# wherever the other players used to stand and pop this one into the air.
+	_settle_ticks = 2
 	_apply_body_shape()
 	_apply_view()
 
@@ -116,7 +125,9 @@ func _read_local_input() -> void:
 
 
 func simulate(delta: float) -> void:
-	if not is_dead:
+	if _settle_ticks > 0:
+		_settle_ticks -= 1
+	elif not is_dead:
 		var limit := deg_to_rad(Cfg.pitch_limit_deg)
 		input.pitch = clampf(input.pitch, -limit, limit)
 		rotation.y = input.yaw

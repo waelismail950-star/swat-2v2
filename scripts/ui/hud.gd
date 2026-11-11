@@ -35,7 +35,8 @@ func _process(delta: float) -> void:
 	var theirs := game.board.scores[1 - player.roster]
 	_top.text = "Round %d      You %d - %d Them      %s  %d:%02d" % [
 		game.board.round_number, mine, theirs, PHASE_NAMES[game.phase], seconds / 60, seconds % 60]
-	_objective.text = "%s: %s" % [Team.NAMES[player.team], _objective_text()]
+	var objective := _objective_text()
+	_objective.text = "%s: %s" % [Team.NAMES[player.team], objective] if objective != "" else ""
 
 	var gun := player.arsenal.weapon()
 	var ammo := "RELOADING" if gun.is_reloading() else "%d / %d" % [gun.ammo, gun.stats().mag]

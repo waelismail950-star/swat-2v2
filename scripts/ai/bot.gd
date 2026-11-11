@@ -31,6 +31,16 @@ var _watch_time := 0.0
 func _init(the_player: Player, the_game: Match) -> void:
 	player = the_player
 	game = the_game
+	game.phase_changed.connect(_on_phase_changed)
+
+
+## A new round teleports the bot, so anything it remembered about where it was going is stale.
+func _on_phase_changed(phase: Match.Phase) -> void:
+	if phase == Match.Phase.SETUP:
+		_route.clear()
+		_goal = Vector3.INF
+		_seen_for = 0.0
+		_sidestep_left = 0.0
 
 
 func think(delta: float) -> void:
@@ -127,15 +137,21 @@ func _engage(enemy: Player, delta: float) -> void:
 	player.input.fire = true if gun.stats().auto else _pulse
 
 
-## False if the bullet would hit the hostage or a teammate first.
+## False if any part of the weapon's cone would reach the hostage or a teammate first.
 func _shot_is_safe() -> bool:
-	var hit := Ballistics.cast(player.get_world_3d(), player.camera.global_position,
-			-player.camera.global_basis.z, player.body.hitbox_rids())
-	var hitbox := hit.get("collider") as Hitbox
-	if hitbox == null:
-		return true
-	var target := hitbox.target
-	return not (target is Hostage or (target is Player and (target as Player).team == player.team))
+	var view := player.camera.global_basis
+	var cone := tan(deg_to_rad(player.arsenal.spread_deg()))
+	for offset: Vector2 in [Vector2.ZERO, Vector2.LEFT, Vector2.RIGHT, Vector2.UP, Vector2.DOWN]:
+		var direction := (-view.z + (view.x * offset.x + view.y * offset.y) * cone).normalized()
+		var hit := Ballistics.cast(player.get_world_3d(), player.camera.global_position,
+				direction, player.body.hitbox_rids())
+		var hitbox := hit.get("collider") as Hitbox
+		if hitbox == null:
+			continue
+		var target := hitbox.target
+		if target is Hostage or (target is Player and (target as Player).team == player.team):
+			return false
+	return true
 
 
 func _chest_of(other: Player) -> Vector3:
