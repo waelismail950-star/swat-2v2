@@ -409,6 +409,7 @@ func test_suspect_gadgets_placed_by_a_client_are_real_on_the_server() -> void:
 			"charges agree: host %s, client %s" % [_on_host(suspect).gadget_charges, suspect.gadget_charges])
 
 	await _go_live()
+	await _place(_on_host(suspect), Vector3(-20, 0, 20))   # out of the doorway
 	# The host's Entry player forces the wedge, opens the door and walks into the alarm.
 	var operator := host.world.local_player
 	await _place(operator, Vector3(-0.7, 0, 2.5), PI / 2)
