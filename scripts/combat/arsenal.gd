@@ -51,6 +51,8 @@ func refill_all() -> void:
 
 ## Cone half-angle of the next shot, given how the player is moving right now.
 func spread_deg() -> float:
+	if weapon() == null:
+		return 0.0
 	var stats := weapon().stats()
 	var speed := Vector2(_player.velocity.x, _player.velocity.z).length()
 	var spread: float = stats.spread_deg + stats.move_spread_deg * clampf(speed / Cfg.sprint_speed, 0.0, 1.0)

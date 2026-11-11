@@ -9,7 +9,8 @@ var game: Match
 var player: Player:
 	set(value):
 		player = value
-		player.arsenal.hit_landed.connect(_on_hit_landed)
+		if player != null:
+			player.arsenal.hit_landed.connect(_on_hit_landed)
 
 var _marker_left := 0.0
 
@@ -23,7 +24,8 @@ var _marker_left := 0.0
 
 
 func _process(delta: float) -> void:
-	if player == null or game == null:
+	# Nothing to show until the first round has handed out sides and weapons.
+	if player == null or game == null or player.arsenal.weapon() == null:
 		return
 	var speed := Vector2(player.velocity.x, player.velocity.z).length()
 	var stance := "CROUCH" if player.is_crouching() else ("SPRINT" if player.is_sprinting() else "STAND")

@@ -1,7 +1,9 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1"]
 [ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="2"]
+[ext_resource type="Script" path="res://scripts/net/session.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/ui/menu.gd" id="4"]
 
 [sub_resource type="ProceduralSkyMaterial" id="sky_mat"]
 
@@ -27,3 +29,9 @@ shadow_enabled = true
 environment = SubResource("env")
 
 [node name="Hud" parent="." instance=ExtResource("2")]
+
+[node name="Session" type="Node" parent="."]
+script = ExtResource("3")
+
+[node name="Menu" type="CanvasLayer" parent="."]
+script = ExtResource("4")

@@ -3,7 +3,7 @@
 2v2 asymmetric hostage rescue in one two-floor house. Entry Team vs Suspects, best of 5.
 Guiding rule: real technique should win because of geometry and mechanics, never because a rule forces it.
 
-Status: **Milestone 4 of 10** (controller, greybox house, doors, weapons, rounds and hostage, local bots). Everything below describes what is built, not what is planned.
+Status: **Milestone 5 of 10** (controller, greybox house, doors, weapons, rounds and hostage, bots, LAN multiplayer). Everything below describes what is built, not what is planned.
 
 ## Run it
 
@@ -11,11 +11,11 @@ Requires Godot 4.4.1.
 
 | What | Command |
 | --- | --- |
-| Play the current build | `godot` from the repo root (or open the project in the editor and press F5) |
+| Play | `godot` from the repo root (or open the project in the editor and press F5), then use the menu |
+| Run all headless tests | `./run_tests.sh` |
+| Run a real host + client match on one machine | `./tests/net/two_instances.sh` |
 
-The current build is local test mode: you and one bot against two bots, full best-of-5. Your side plays Entry for rounds 1-2 and Suspects from round 3. If you go down you watch through your teammate's eyes.
-
-On Windows, or without bash, the test script is these two commands:
+On Windows, or without bash, `run_tests.sh` is these two commands:
 
 ```
 godot --headless --import
@@ -24,18 +24,43 @@ godot --headless --fixed-fps 60 res://tests/test_runner.tscn
 
 Exit code 0 means every test passed.
 
+### Playing
+
+- **Play solo with bots:** you and one bot against two bots, full best-of-5. Your team plays Entry for rounds 1-2 and Suspects from round 3.
+- **Host a game:** opens a lobby. Give the others your IP address. Press Start when ready; empty slots are filled with bots.
+- **Join:** type the host's IP address. In the lobby, Switch team moves you between Team A (Entry first) and Team B (Suspects first).
+- The game uses **UDP port 24565**. On a LAN the host may need to allow Godot through the firewall. Over the internet the host must forward that port.
+- If you go down you watch through a living teammate's eyes.
+
+To test multiplayer alone, start the game twice on one machine: host in one window, join `127.0.0.1` in the other.
+
+Options after `--` skip the menu, for example `godot -- --solo`:
+
+| Option | Effect |
+| --- | --- |
+| `--solo` | straight into a solo match |
+| `--host` | host and wait in the lobby |
+| `--join=ADDRESS` | join that host |
+| `--name=NAME` | your player name |
+| `--autostart=N` | host only: start as soon as N humans are in the lobby |
+| `--autopilot` | a bot plays for you |
+| `--quick` | host only: 3 s setup, 60 s rounds, quit when the match ends |
+| `--netlog` | print one line of match state per second |
+
 ## Layout
 
 ```
 config/game_config.gd   every tunable (autoload `Cfg`)
 scenes/                 main.tscn, player/player.tscn
 scripts/core/           match state machine, scoreboard, teams, physics layers
+scripts/game/           world: builds a match's scene and replicates the server's decisions
+scripts/net/            session: connection, lobby, match start
 scripts/ai/             bots for local test mode
 scripts/combat/         weapons, hit resolution, hitboxes, shot visuals
 scripts/player/         controller, input struct, visible body, first-person gun
-scripts/ui/             HUD
+scripts/ui/             HUD, menu
 scripts/world/          house (map data and builder), door, hostage, hostage markers, waypoint graph
-tests/                  headless runner and test_*.gd
+tests/                  headless runner and test_*.gd; net/ holds the two-process check
 docs/                   this file, KNOWN_ISSUES.md
 ```
 
@@ -222,15 +247,49 @@ Sightline intent:
 - Doors off the halls open into the corner of a room, so the first step inside exposes you to most of the room: the fatal funnel. Leaning from the hall clears most of it first.
 - The two stair-side doors on each floor sit right at the stair mouth, so a team coming off the stairs is immediately between two doors.
 
+## Networking
+
+Listen-server on Godot's high-level multiplayer (ENet), four players at most. One player hosts and is the server; the host also runs the bots.
+
+**Who decides what**
+
+| Thing | Decided by | How others learn it |
+| --- | --- | --- |
+| A player's position, view, stance, lean | the machine that owns that player | sent every physics tick, smoothed on arrival |
+| Whether a shot hit, health, going down | server | reliable message per change |
+| Door state | server | reliable message per change; each machine swings the panel itself |
+| Hostage position, state, secure progress | server | sent every tick |
+| Phase, clock, score, hostage room, round result | server | reliable message per change; clients count the clock down locally |
+| Teams, spawns, loadouts | server | sent with each respawn |
+
+**What a client may ask for.** A client never changes the world itself. It sends three kinds of request, each of which the server checks:
+- *I fired:* weapon slot, eye position, one direction per pellet. Rejected if the player is down, weapons are safe, the eye position is more than 1.5 m from where the server sees it, the pellet count is wrong, or the fire-rate and ammunition budgets are exhausted.
+- *I pressed interact / crack on this thing.* Rejected if the player is down or not within reach.
+- *I am holding interact on this thing / I let go.* The server keeps counting only while the player stays in reach.
+
+The shooter's own machine draws its tracers immediately; damage, hit markers and deaths wait for the server.
+
+**Deliberate simplifications**
+- **Movement is client-authoritative.** No server-side movement, prediction or rollback. A cheating client could teleport; among friends that is an acceptable trade for never rubber-banding.
+- **No lag compensation.** The server tests a shot against where it currently sees other players. On a LAN the difference is a few centimetres. Above roughly 50 ms of latency, moving targets have to be led.
+- **Joining is only possible in the lobby.** A match in progress cannot be joined.
+- **A client who disconnects is replaced by a bot.** If the host leaves, the match ends for everyone.
+- **Fire rate is checked with a small burst allowance** (3 shots), so shots bunched up by the network are not discarded. The server cannot see reloads, so it infers one from any pause as long as a reload.
+
+**How it is built**
+- `Session` (connection, lobby, start) and `World` (the match's scene) sit at the same node paths on every machine, so remote calls line up. `World` is built identically everywhere from one participant list sent by the host.
+- A player node's network authority is the machine that owns it. Messages on the player node go owner -> everyone (state) or owner -> server (requests). Messages on `World` go server -> clients only.
+- Offline play uses the same code: with no connection the local machine is "the server".
+
 ## Architecture notes
 
 - The controller never reads the keyboard directly. `Player.simulate()` consumes a `PlayerInput` (move, look angles, sprint, crouch, lean). Humans fill it from the keyboard, tests fill it from code, and bots and the network will do the same.
 - The player origin is at the feet. `Head` carries lean offset and pitch; `Camera` carries lean roll.
 - Level geometry is built from boxes in code (`Greybox`), driven by the `ROOMS`, `WALLS` and `DOORS` tables at the top of `scripts/world/house.gd`. Door openings are cut automatically wherever a door sits on a wall. To move a wall or door, edit the table.
 - Stairs collide as smooth ramps through the step noses; the visible steps are decoration. The controller cannot climb ledges.
-- A door's authoritative data is `state` plus `swing_sign`. The panel angle is derived and animated locally, which is what will be replicated in M5.
+- A door's authoritative data is `state` plus `swing_sign`. The panel angle is derived and animated on each machine.
 - Physics layers: 1 = world (walls, floors, doors), 2 = players, 3 = hitboxes (hit only by weapon rays).
-- `Arsenal` (a child of each player) owns trigger logic, ammo, spread and recoil, and resolves each shot by raycast. That resolution step is what moves to the server in M5.
+- `Arsenal` (a child of each player) owns trigger logic, ammo, spread and recoil. The owner picks each pellet's direction; only the server turns a shot into damage.
 - Anything shootable exposes `take_hit(damage, zone, shooter)` and owns `Hitbox` areas that point back at it. The hostage will use the same interface.
 - Recoil is a view offset added on top of the player's look angles, so it never fights the mouse.
 - `Match` is the single authority on round state: phase, clock, score, hostage room, and who won and why. Everything else reports to it through signals (`Player.died`, `Hostage.killed`, `Hostage.extracted`). `Scoreboard` holds the pure score and side-swap rules.
