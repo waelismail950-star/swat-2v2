@@ -12,3 +12,7 @@ var sprint := false
 var crouch := false
 ## -1 = left, +1 = right, 0 = centered.
 var lean := 0.0
+var fire := false
+var reload := false
+## Index into the carried weapons.
+var weapon_slot := 0

@@ -18,9 +18,11 @@ func _ready() -> void:
 			if not test_name.begins_with("test_"):
 				continue
 			total += 1
+			var saved := _snapshot_config()
 			var case: TestCase = script.new()
 			add_child(case)
 			await case.call(test_name)
+			_restore_config(saved)
 			if case.failures.is_empty():
 				print("  ok    %s :: %s" % [file, test_name])
 			else:
@@ -32,3 +34,18 @@ func _ready() -> void:
 			await get_tree().physics_frame
 	print("\n%d/%d tests passed" % [total - failed, total])
 	get_tree().quit(mini(failed, 1))
+
+
+## Tests may change tunables; every test starts from the values in the config file.
+func _snapshot_config() -> Dictionary:
+	var saved := {}
+	for property in Cfg.get_script().get_script_property_list():
+		if property.usage & PROPERTY_USAGE_SCRIPT_VARIABLE:
+			var value: Variant = Cfg.get(property.name)
+			saved[property.name] = value.duplicate(true) if value is Dictionary else value
+	return saved
+
+
+func _restore_config(saved: Dictionary) -> void:
+	for property: String in saved:
+		Cfg.set(property, saved[property])

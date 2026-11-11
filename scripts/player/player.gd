@@ -3,6 +3,11 @@ extends CharacterBody3D
 ## First-person controller. Origin is at the feet.
 ## All motion comes from `input`; set `controlled_locally` to false to drive it from code.
 
+signal died(victim: Player, killer: Node)
+
+## Eye height of a downed player's camera.
+const DOWNED_EYE := 0.35
+
 @export var controlled_locally := true
 
 var input := PlayerInput.new()
@@ -10,10 +15,15 @@ var input := PlayerInput.new()
 var crouch_frac := 0.0
 ## -1 = full left lean, +1 = full right lean (after wall clamping).
 var lean_frac := 0.0
+var health := 0.0
+var is_dead := false
+var arsenal := Arsenal.new(self)
 
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Camera
+@onready var body: PlayerBody = $Body
 @onready var _collider: CollisionShape3D = $Collider
+@onready var _viewmodel: Viewmodel = $Head/Camera/Viewmodel
 
 var _capsule: CapsuleShape3D
 var _probe := SphereShape3D.new()
@@ -23,16 +33,36 @@ func _ready() -> void:
 	_capsule = CapsuleShape3D.new()
 	_capsule.radius = Cfg.body_radius
 	_collider.shape = _capsule
-	collision_layer = Layers.PLAYER
 	collision_mask = Layers.WORLD | Layers.PLAYER
 	floor_snap_length = 0.3
+	add_child(arsenal)
+	arsenal.fired.connect(_on_fired)
+	body.setup(self)
+	body.set_first_person(controlled_locally)
+	_viewmodel.visible = controlled_locally
 	camera.current = controlled_locally
+	respawn(global_transform)
+
+
+## Puts the player back on their feet at `at` with full health and ammo.
+func respawn(at: Transform3D) -> void:
+	global_transform = at
+	input.yaw = rotation.y
+	input.pitch = 0.0
+	velocity = Vector3.ZERO
+	crouch_frac = 0.0
+	lean_frac = 0.0
+	health = Cfg.max_health
+	is_dead = false
+	collision_layer = Layers.PLAYER
+	body.set_alive(true)
+	arsenal.refill_all()
 	_apply_body_shape()
 	_apply_view()
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not controlled_locally:
+	if not controlled_locally or is_dead:
 		return
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var sens := deg_to_rad(Cfg.mouse_sensitivity_deg)
@@ -42,6 +72,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		use_door(Door.Action.TOGGLE_OPEN)
 	elif event.is_action_pressed("door_crack"):
 		use_door(Door.Action.TOGGLE_CRACK)
+	else:
+		for slot in arsenal.slots.size():
+			if event.is_action_pressed("weapon_%d" % (slot + 1)):
+				input.weapon_slot = slot
 
 
 func _physics_process(delta: float) -> void:
@@ -55,17 +89,24 @@ func _read_local_input() -> void:
 	input.sprint = Input.is_action_pressed("sprint")
 	input.crouch = Input.is_action_pressed("crouch")
 	input.lean = Input.get_axis("lean_left", "lean_right")
+	input.reload = Input.is_action_pressed("reload")
+	# The click that captures the mouse must not also fire.
+	input.fire = Input.is_action_pressed("fire") and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
 
 
 func simulate(delta: float) -> void:
-	var limit := deg_to_rad(Cfg.pitch_limit_deg)
-	input.pitch = clampf(input.pitch, -limit, limit)
-	rotation.y = input.yaw
-	_update_crouch(delta)
-	_update_lean(delta)
-	_update_velocity(delta)
-	move_and_slide()
+	if not is_dead:
+		var limit := deg_to_rad(Cfg.pitch_limit_deg)
+		input.pitch = clampf(input.pitch, -limit, limit)
+		rotation.y = input.yaw
+		_update_crouch(delta)
+		_update_lean(delta)
+		_update_velocity(delta)
+		move_and_slide()
 	_apply_view()
+	arsenal.tick(delta)
+	if controlled_locally:
+		_viewmodel.update(arsenal)
 
 
 func is_crouching() -> bool:
@@ -90,6 +131,24 @@ func max_speed() -> float:
 	if input.lean != 0.0:
 		speed *= Cfg.lean_move_mult
 	return speed
+
+
+## Called by weapons. Returns true if this hit killed the player.
+func take_hit(damage: float, zone: Hitbox.Zone, shooter: Node) -> bool:
+	if is_dead:
+		return false
+	if zone == Hitbox.Zone.HEAD:
+		damage *= Cfg.headshot_mult
+	health = maxf(health - damage, 0.0)
+	if health > 0.0:
+		return false
+	is_dead = true
+	velocity = Vector3.ZERO
+	collision_layer = 0  # a downed player blocks nobody
+	body.set_alive(false)
+	_apply_view()
+	died.emit(self, shooter)
+	return true
 
 
 ## The door under the crosshair within reach, or null.
@@ -165,9 +224,22 @@ func _apply_body_shape() -> void:
 
 
 func _apply_view() -> void:
+	if is_dead:
+		head.position = Vector3(0.0, DOWNED_EYE, 0.0)
+		return
+	var limit := deg_to_rad(Cfg.pitch_limit_deg)
 	head.position = Vector3(lean_frac * Cfg.lean_offset, _eye_height(), 0.0)
-	head.rotation.x = input.pitch
+	head.rotation.x = clampf(input.pitch + arsenal.recoil.y, -limit, limit)
+	head.rotation.y = arsenal.recoil.x
 	camera.rotation.z = -lean_frac * deg_to_rad(Cfg.lean_roll_deg)
+	body.pose(current_height(), lean_frac)
+
+
+func _on_fired(_weapon: Weapon, from: Vector3, shots: Array) -> void:
+	# Tracers start at the gun, not the eye, so they do not cover the crosshair.
+	var muzzle := from + camera.global_basis * Vector3(0.15, -0.12, -0.5)
+	for shot: Dictionary in shots:
+		ShotFx.tracer(get_parent(), muzzle, shot.to, shot.hit)
 
 
 ## Sweeps a sphere through the world and returns the fraction of `motion` that is free (0..1).

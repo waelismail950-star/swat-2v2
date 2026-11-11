@@ -4,3 +4,4 @@ extends RefCounted
 
 const WORLD := 1    # walls, floors, doors
 const PLAYER := 2   # player bodies
+const HITBOX := 4   # damage zones, hit only by weapon rays
