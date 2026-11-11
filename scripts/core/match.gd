@@ -1,7 +1,7 @@
 class_name Match
 extends Node
 ## Runs a best-of-five: phases, timers, spawns, the hostage and win conditions.
-## This node is the single authority on round state.
+## The server's copy is the single authority on round state; clients' copies only mirror it.
 
 enum Phase { WAITING, SETUP, ACTION, ROUND_END, MATCH_END }
 enum Reason {
@@ -10,6 +10,8 @@ enum Reason {
 }
 
 signal phase_changed(phase: Phase)
+## Anything a client needs to mirror has changed (see `snapshot`).
+signal changed
 signal round_ended(winner: Team.Id, reason: Reason)
 
 const REASON_TEXT: Array[String] = [
@@ -45,6 +47,7 @@ func add_player(player: Player, roster: int) -> void:
 	player.roster = roster
 	player.died.connect(_on_player_died)
 	players.append(player)
+	hostage.players = players
 
 
 func start_match() -> void:
@@ -67,13 +70,34 @@ func choose_hostage_room(index: int) -> void:
 	hostage_room = index
 	var spot: Vector3 = House.HOSTAGE_ROOMS[index].spot
 	hostage.place(spot, house.route(spot, House.EXTRACTION))
+	changed.emit()
+
+
+## Everything a client needs to mirror this match.
+func snapshot() -> Dictionary:
+	return {phase = phase, time_left = time_left, round_number = board.round_number, scores = board.scores,
+			hostage_room = hostage_room, last_winner = last_winner, last_reason = last_reason}
+
+
+## Applies the server's snapshot (clients only).
+func set_from_server(state: Dictionary) -> void:
+	time_left = state.time_left
+	board.round_number = state.round_number
+	board.scores.assign(state.scores)
+	hostage_room = state.hostage_room
+	last_winner = state.last_winner
+	last_reason = state.last_reason
+	if phase != state.phase:
+		phase = state.phase
+		_apply_phase_rules()
+		phase_changed.emit(phase)
 
 
 func _physics_process(delta: float) -> void:
 	if phase == Phase.WAITING:
 		return
-	time_left -= delta
-	if time_left > 0.0:
+	time_left = maxf(time_left - delta, 0.0)
+	if time_left > 0.0 or not multiplayer.is_server():
 		return
 	match phase:
 		Phase.SETUP:
@@ -99,31 +123,22 @@ func _start_round() -> void:
 		var yaw := 0.0 if team == Team.Id.ENTRY else PI  # both sides start facing the front door
 		player.assign_team(team)
 		player.respawn(Transform3D(Basis(Vector3.UP, yaw), spawns[placed[team] % spawns.size()]))
-		player.arsenal.safe = true
 		placed[team] += 1
 	_set_phase(Phase.SETUP, Cfg.setup_time)
-	for spot in house.hostage_spots:
-		spot.enabled = true
 	choose_hostage_room(rng.randi_range(0, House.HOSTAGE_ROOMS.size() - 1))
 
 
 func _begin_action() -> void:
 	house.set_exterior_locked(false)
-	for spot in house.hostage_spots:
-		spot.enabled = false
-	for player in players:
-		player.arsenal.safe = false
 	_set_phase(Phase.ACTION, Cfg.round_time)
 
 
 func _end_round(winner: Team.Id, reason: Reason) -> void:
-	if phase != Phase.ACTION:
+	if phase != Phase.ACTION or not multiplayer.is_server():
 		return
 	last_winner = winner
 	last_reason = reason
 	board.record_win(winner)
-	for player in players:
-		player.arsenal.safe = true
 	_set_phase(Phase.ROUND_END, Cfg.round_end_time)
 	round_ended.emit(winner, reason)
 
@@ -131,7 +146,18 @@ func _end_round(winner: Team.Id, reason: Reason) -> void:
 func _set_phase(new_phase: Phase, duration: float) -> void:
 	phase = new_phase
 	time_left = duration
+	_apply_phase_rules()
 	phase_changed.emit(phase)
+	changed.emit()
+
+
+## Rules that follow directly from the phase, applied identically on every peer:
+## weapons are live only during the round, hostage markers only during setup.
+func _apply_phase_rules() -> void:
+	for player in players:
+		player.arsenal.safe = phase != Phase.ACTION
+	for spot in house.hostage_spots:
+		spot.enabled = phase == Phase.SETUP
 
 
 func _on_player_died(_victim: Player, _killer: Node) -> void:

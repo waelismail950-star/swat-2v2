@@ -22,6 +22,7 @@ func _ready() -> void:
 			var case: TestCase = script.new()
 			add_child(case)
 			await case.call(test_name)
+			case.cleanup()
 			_restore_config(saved)
 			if case.failures.is_empty():
 				print("  ok    %s :: %s" % [file, test_name])

@@ -24,6 +24,7 @@ func _spawn(at: Vector3, team: Team.Id) -> Player:
 	player.position = at
 	add_child(player)
 	player.assign_team(team)
+	hostage.players.append(player)
 	for id: String in Cfg.weapons:
 		Cfg.weapons[id].spread_deg = 0.0
 	return player

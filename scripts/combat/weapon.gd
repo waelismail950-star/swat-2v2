@@ -6,6 +6,9 @@ var id: String
 var ammo: int
 var cooldown := 0.0
 var reload_left := 0.0
+# Server-side bookkeeping for a remote player's weapon.
+var last_shot_time := -1000.0
+var rate_credit := 1.0
 
 
 func _init(weapon_id: String) -> void:
@@ -25,3 +28,5 @@ func refill() -> void:
 	ammo = stats().mag
 	cooldown = 0.0
 	reload_left = 0.0
+	last_shot_time = -1000.0
+	rate_credit = 1.0

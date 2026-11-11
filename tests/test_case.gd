@@ -6,6 +6,11 @@ extends Node3D
 var failures: Array[String] = []
 
 
+## Called by the runner after each test, while the case is still in the scene tree.
+func cleanup() -> void:
+	pass
+
+
 func check(condition: bool, message: String) -> void:
 	if not condition:
 		failures.append(message)

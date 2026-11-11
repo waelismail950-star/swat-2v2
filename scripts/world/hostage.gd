@@ -19,6 +19,8 @@ var health := 0.0
 ## Seconds of uninterrupted holding so far.
 var secure_progress := 0.0
 var path: Array[Vector3] = []
+## Everyone in the match; set by the match. Only living Entry players count as escorts.
+var players: Array[Player] = []
 
 var _path_index := 0
 var _last_hold_frame := -10
@@ -61,12 +63,26 @@ func place(at: Vector3, route: Array[Vector3]) -> void:
 	velocity = Vector3.ZERO
 	path = route
 	_path_index = 0
-	state = State.HELD
 	health = Cfg.hostage_health
 	secure_progress = 0.0
-	_reach.collision_layer = Layers.INTERACT
-	_body.set_alive(true)
-	_body.pose(HELD_HEIGHT, 0.0)
+	_enter(State.HELD)
+
+
+## Applies the server's word on the hostage (clients only).
+func set_from_server(at: Vector3, new_state: State, progress: float) -> void:
+	global_position = at
+	secure_progress = progress
+	if new_state != state:
+		_enter(new_state)
+
+
+## Switches state and everything that shows it: pose, hitboxes, whether it can be interacted with.
+func _enter(new_state: State) -> void:
+	state = new_state
+	velocity = Vector3.ZERO
+	_reach.collision_layer = Layers.INTERACT if state == State.HELD else 0
+	_body.set_alive(state != State.DEAD)
+	_body.pose(HELD_HEIGHT if state == State.HELD else FOLLOW_HEIGHT, 0.0)
 
 
 func interact_prompt(player: Player) -> String:
@@ -85,9 +101,7 @@ func on_interact_hold(player: Player, delta: float) -> void:
 	secure_progress += delta
 	_last_hold_frame = Engine.get_physics_frames()
 	if secure_progress >= Cfg.hostage_secure_time:
-		state = State.FOLLOWING
-		_reach.collision_layer = 0
-		_body.pose(FOLLOW_HEIGHT, 0.0)
+		_enter(State.FOLLOWING)
 		secured.emit(player)
 
 
@@ -98,10 +112,7 @@ func take_hit(damage: float, _zone: Hitbox.Zone, shooter: Node) -> bool:
 	health -= damage
 	if health > 0.0:
 		return false
-	state = State.DEAD
-	velocity = Vector3.ZERO
-	_reach.collision_layer = 0
-	_body.set_alive(false)
+	_enter(State.DEAD)
 	killed.emit(shooter)
 	return true
 
@@ -112,7 +123,7 @@ func next_waypoint() -> Vector3:
 
 
 func is_escorted() -> bool:
-	for player: Player in get_tree().get_nodes_in_group(Player.GROUP):
+	for player in players:
 		if player.team == Team.Id.ENTRY and not player.is_dead \
 				and player.global_position.distance_to(global_position) <= Cfg.hostage_follow_radius:
 			return true
@@ -120,6 +131,8 @@ func is_escorted() -> bool:
 
 
 func _physics_process(delta: float) -> void:
+	if not multiplayer.is_server():
+		return  # clients only display what the server sends
 	if state == State.HELD:
 		# Letting go of the key loses all progress.
 		if Engine.get_physics_frames() - _last_hold_frame > 1:
@@ -135,7 +148,7 @@ func _physics_process(delta: float) -> void:
 		if to.length() < ARRIVE_DISTANCE:
 			_path_index += 1
 			if _path_index >= path.size():
-				state = State.EXTRACTED
+				_enter(State.EXTRACTED)
 				extracted.emit()
 				return
 		else:

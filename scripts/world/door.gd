@@ -66,13 +66,18 @@ func on_crack(player: Player) -> void:
 		interact(Action.TOGGLE_CRACK, player.global_position)
 
 
-## Shuts the door instantly (round reset).
+## Shuts the door instantly (round reset). Does not emit state_changed.
 func reset(lock: bool) -> void:
 	locked = lock
 	state = State.CLOSED
 	angle_deg = 0.0
 	_panel.rotation_degrees.y = 0.0
-	state_changed.emit(self)
+
+
+## Sets the door to what the server says it is (clients only). The panel swings there on its own.
+func set_from_server(new_state: State, new_swing_sign: float) -> void:
+	state = new_state
+	swing_sign = new_swing_sign
 
 
 ## Applies a door action. `from` is where the operator stands (world space).

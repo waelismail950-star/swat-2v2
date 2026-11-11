@@ -1,5 +1,8 @@
 class_name House
 extends Node3D
+
+signal doors_reset(lock_exterior: bool)
+signal exterior_lock_changed(locked: bool)
 ## The greybox map: one two-floor house built from the tables below.
 ## X runs east, Z runs south, the footprint is x in [-7, 7], z in [-5, 5].
 
@@ -130,11 +133,13 @@ func _ready() -> void:
 func reset_doors(lock_exterior: bool) -> void:
 	for door: Door in doors.values():
 		door.reset(lock_exterior and door.door_name in EXTERIOR_DOORS)
+	doors_reset.emit(lock_exterior)
 
 
 func set_exterior_locked(locked: bool) -> void:
 	for door_name in EXTERIOR_DOORS:
 		doors[door_name].locked = locked
+	exterior_lock_changed.emit(locked)
 
 
 ## Name of the room (or "Stairwell", "Outside") containing a point.
