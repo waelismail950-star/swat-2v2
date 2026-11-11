@@ -119,3 +119,29 @@ var bot_aim_error_deg := 2.5
 var bot_turn_speed_deg := 300.0
 var bot_fov_deg := 110.0
 var bot_view_range := 25.0
+
+# --- Gadgets ---
+## Uses per round. -1 means unlimited.
+var gadget_charges := {
+	"flashbang": 2, "door_camera": -1, "breach": 1,   # Entry
+	"wedge": 2, "alarm": 2,                            # Suspects
+}
+var flash_throw_speed := 11.0
+var flash_fuse := 1.5
+## Beyond this distance from the bang, nobody is affected.
+var flash_radius := 9.0
+## Seconds of blindness at point-blank range, facing the bang.
+var flash_duration := 3.5
+## Blindness multiplier when facing away from the bang.
+var flash_look_away_mult := 0.4
+var breach_fuse := 2.5
+## A breaching charge stuns (flashes) players this close to the door, with line of sight.
+var breach_stun_radius := 3.5
+var breach_stun_duration := 2.5
+## Seconds of holding interact to force a wedged door.
+var wedge_force_time := 4.0
+## A trip alarm goes off when an Entry operator comes this close.
+var alarm_radius := 1.2
+var door_camera_fov_deg := 100.0
+## How far the door camera can be panned to either side.
+var door_camera_pan_deg := 60.0

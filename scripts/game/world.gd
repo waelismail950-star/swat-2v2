@@ -9,6 +9,7 @@ const PLAYER_SCENE := preload("res://scenes/player/player.tscn")
 var house: House
 var hostage: Hostage
 var game: Match
+var gadgets: GadgetSystem
 ## Node name -> player.
 var players: Dictionary[String, Player] = {}
 ## The player this machine controls (null on a machine that only runs bots).
@@ -43,8 +44,12 @@ func build(participants: Array) -> void:
 		if entry.bot and multiplayer.is_server():
 			give_brain(player)
 
+	gadgets = GadgetSystem.new(self)
+	gadgets.name = "Gadgets"
+	add_child(gadgets)
 	game.phase_changed.connect(_on_phase_changed)
 	if multiplayer.is_server():
+		gadgets.serve()
 		_relay_server_decisions()
 
 
@@ -82,9 +87,11 @@ func _relay_server_decisions() -> void:
 		player.health_changed.connect(func(p: Player) -> void: _net_health.rpc(id, p.health, p.is_dead))
 		player.respawned.connect(func(p: Player) -> void: _net_respawn.rpc(id, p.team, p.global_transform))
 		player.arsenal.fired.connect(_on_fired.bind(id))
+		player.kit_changed.connect(func(p: Player) -> void: _net_kit.rpc(id, p.loadout_index, p.gadget_charges))
+		player.flashed.connect(func(_p: Player, seconds: float) -> void: _net_flashed.rpc(id, seconds))
 		player.arsenal.hit_landed.connect(_on_hit_landed.bind(player))
 	for door: Door in house.doors.values():
-		door.state_changed.connect(func(d: Door) -> void: _net_door.rpc(d.door_name, d.state, d.swing_sign))
+		door.state_changed.connect(func(d: Door) -> void: _net_door.rpc(d.door_name, d.snapshot()))
 	house.doors_reset.connect(func(lock: bool) -> void: _net_doors_reset.rpc(lock))
 	house.exterior_lock_changed.connect(func(locked: bool) -> void: _net_exterior_locked.rpc(locked))
 	game.changed.connect(func() -> void: _net_match.rpc(game.snapshot()))
@@ -120,6 +127,19 @@ func _net_respawn(id: String, team: Team.Id, at: Transform3D) -> void:
 	players[id].respawn(at)
 
 
+@rpc("authority", "call_remote", "reliable")
+func _net_kit(id: String, loadout_index: int, charges: Array) -> void:
+	var player := players[id]
+	if player.loadout_index != loadout_index or player.gadgets.is_empty():
+		player.set_loadout(loadout_index)
+	player.gadget_charges.assign(charges)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _net_flashed(id: String, seconds: float) -> void:
+	players[id].flash_left = maxf(players[id].flash_left, seconds)
+
+
 @rpc("authority", "call_remote", "unreliable")
 func _net_shot_fx(id: String, from: Vector3, ends: PackedVector3Array, hits: PackedByteArray) -> void:
 	var player := players[id]
@@ -138,8 +158,8 @@ func _net_hit_marker(zone: Hitbox.Zone, killed: bool) -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
-func _net_door(door_name: String, state: Door.State, swing_sign: float) -> void:
-	house.doors[door_name].set_from_server(state, swing_sign)
+func _net_door(door_name: String, snapshot: Dictionary) -> void:
+	house.doors[door_name].set_from_server(snapshot)
 
 
 @rpc("authority", "call_remote", "reliable")

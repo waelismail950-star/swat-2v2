@@ -19,3 +19,7 @@ var weapon_slot := 0
 ## Held state of the interact and crack-door keys; presses are detected by the controller.
 var interact := false
 var crack := false
+## Held state of the two gadget keys and the change-loadout key.
+var gadget_1 := false
+var gadget_2 := false
+var next_loadout := false

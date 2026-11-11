@@ -63,8 +63,8 @@ func _process(delta: float) -> void:
 		for mate in world.game.players_on(me.team):
 			if not mate.is_dead:
 				view = mate
-	if not view.camera.current:
-		view.camera.make_current()
+	if not view.active_camera().current:
+		view.active_camera().make_current()
 
 	if _options.has("netlog"):
 		_log_timer -= delta
@@ -89,6 +89,7 @@ func _on_world_started(world: World) -> void:
 	_menu.visible = false
 	_hud.visible = true
 	_hud.game = world.game
+	_hud.gadgets = world.gadgets
 	_hud.player = world.local_player
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	if _options.has("autopilot"):

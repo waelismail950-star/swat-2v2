@@ -87,7 +87,8 @@ func tick(delta: float) -> void:
 	var stats := gun.stats()
 	var pulled: bool = input.fire and (stats.auto or not _trigger_was_down)
 	_trigger_was_down = input.fire
-	var ready := _swap_left <= 0.0 and _sprint_lock <= 0.0 and not gun.is_reloading()
+	var ready := _swap_left <= 0.0 and _sprint_lock <= 0.0 and not gun.is_reloading() \
+			and _player.peek_door == null
 
 	if ready and gun.ammo < stats.mag and (input.reload or (pulled and gun.ammo == 0)):
 		gun.reload_left = stats.reload_time
@@ -127,7 +128,7 @@ func resolve(gun: Weapon, from: Vector3, directions: Array[Vector3]) -> void:
 
 ## Server only: a client says its player fired. Checked against what the server knows before it counts.
 func accept_remote_shot(slot: int, from: Vector3, directions: Array) -> void:
-	if _player.is_dead or safe or slot < 0 or slot >= slots.size():
+	if _player.is_dead or safe or _player.peek_door != null or slot < 0 or slot >= slots.size():
 		return
 	var gun := slots[slot]
 	var stats := gun.stats()

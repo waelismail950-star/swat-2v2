@@ -105,6 +105,8 @@ func _think_suspect(delta: float) -> void:
 # --- Combat ---
 
 func _visible_enemy() -> Player:
+	if player.flash_left > 0.0:
+		return null
 	var eye := player.camera.global_position
 	var facing := -player.global_basis.z
 	var nearest: Player = null

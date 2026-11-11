@@ -380,6 +380,118 @@ func test_letting_go_stops_the_servers_count() -> void:
 	check(host.world.hostage.state == Hostage.State.HELD, "and never secures")
 
 
+func _tap_gadget(player: Player, slot: int) -> void:
+	if slot == 0:
+		player.input.gadget_1 = true
+	else:
+		player.input.gadget_2 = true
+	await wait(0.05)
+	player.input.gadget_1 = false
+	player.input.gadget_2 = false
+	await wait(0.3)
+
+
+func test_suspect_gadgets_placed_by_a_client_are_real_on_the_server() -> void:
+	await _start_match()
+	var suspect := client.world.local_player
+	var host_door := host.world.house.doors["Foyer-Living"]
+	var client_door := client.world.house.doors["Foyer-Living"]
+	var client_alarms: Array[String] = []
+	client.world.gadgets.alarm_raised.connect(func(d: Door) -> void: client_alarms.append(d.door_name))
+
+	await _place(_on_host(suspect), Vector3(-3.3, 0, 2.5), -PI / 2)   # in the Living room, facing the door
+	await _tap_gadget(suspect, 0)
+	check(host_door.wedged and client_door.wedged, "wedge is on the door on both machines")
+	await _tap_gadget(suspect, 1)
+	check(host_door.alarm_side != 0.0 and client_door.alarm_side == host_door.alarm_side, "trip alarm too, on the same side")
+	var left := [Cfg.gadget_charges.wedge - 1, Cfg.gadget_charges.alarm - 1]
+	check(_on_host(suspect).gadget_charges == left and suspect.gadget_charges == left,
+			"charges agree: host %s, client %s" % [_on_host(suspect).gadget_charges, suspect.gadget_charges])
+
+	await _go_live()
+	# The host's Entry player forces the wedge, opens the door and walks into the alarm.
+	var operator := host.world.local_player
+	await _place(operator, Vector3(-0.7, 0, 2.5), PI / 2)
+	operator.input.interact = true
+	await wait(Cfg.wedge_force_time + 0.3)
+	operator.input.interact = false
+	await wait(0.2)
+	check(not host_door.wedged and not client_door.wedged, "forced wedge disappears for the client too")
+	operator.press_interact()
+	await wait(0.6)
+	check(await walk_to(operator, Vector3(-4.5, 0, 2.5), 4.0), "operator walks in")
+	await wait(0.3)
+	check(client_alarms == ["Foyer-Living"], "the client is alerted: %s" % [client_alarms])
+	check(client_door.alarm_side == 0.0, "and sees the alarm gone")
+
+
+func test_flashbang_thrown_by_the_host_blinds_the_client() -> void:
+	await _start_match()
+	await _go_live()
+	var thrower := host.world.local_player
+	var victim := client.world.local_player
+	await _place(thrower, Vector3(-12, 0, 20), 0.0)
+	await _place(_on_host(victim), Vector3(-12, 0, 10), PI)
+	await _tap_gadget(thrower, 0)
+	await wait(0.4)
+	var seen := client.world.get_children().filter(func(n: Node) -> bool: return n is Flashbang)
+	check(seen.size() == 1, "client sees the grenade in flight")
+	var real := host.world.get_children().filter(func(n: Node) -> bool: return n is Flashbang)
+	if seen.size() == 1 and real.size() == 1:
+		check(seen[0].global_position.distance_to(real[0].global_position) < 0.5, "where the host has it")
+	# Look at wherever it ends up, so the flash is not weakened by facing away.
+	await wait(Cfg.flash_fuse - 1.0)
+	if real.size() == 1 and is_instance_valid(real[0]):
+		await look_at_point(victim, real[0].global_position)
+	await wait(0.6)
+	check(victim.flash_left > 0.5, "the client's own player is blinded (%.2f s)" % victim.flash_left)
+	check(_on_host(victim).flash_left > 0.5, "and the host knows it")
+	check(client.world.get_children().filter(func(n: Node) -> bool: return n is Flashbang and not n.is_queued_for_deletion()).is_empty(),
+			"the grenade is gone on the client")
+	check(_on_client(thrower).gadget_charges[0] == Cfg.gadget_charges.flashbang - 1, "client sees the host's remaining charges")
+
+
+func test_client_loadout_choice_and_door_camera() -> void:
+	await _connect_both()
+	await _swap_rosters()
+	await _begin()
+	var operator := client.world.local_player
+	check(operator.gadgets == ["flashbang", "door_camera"], "client starts with the default Entry kit")
+	operator.input.next_loadout = true
+	await wait(0.05)
+	operator.input.next_loadout = false
+	await wait(0.3)
+	check(_on_host(operator).gadgets == ["flashbang", "breach"], "server changed the client's kit: %s" % [_on_host(operator).gadgets])
+	check(operator.gadgets == ["flashbang", "breach"], "client was told: %s" % [operator.gadgets])
+	for i in 2:
+		operator.input.next_loadout = true
+		await wait(0.05)
+		operator.input.next_loadout = false
+		await wait(0.3)
+	check(operator.gadgets == ["flashbang", "door_camera"], "back to the camera kit: %s" % [operator.gadgets])
+
+	await _go_live()
+	var host_door := host.world.house.doors["Foyer-Living"]
+	var target := host.world.local_player
+	await _place(target, Vector3(-3.3, 0, 2.5), -PI / 2)             # host's Suspect just inside the room
+	await _place(_on_host(operator), Vector3(-0.7, 0, 2.5), PI / 2)  # client at the door
+	operator.input.gadget_2 = true
+	await wait(0.4)
+	check(operator.peek_door == client.world.house.doors["Foyer-Living"], "client is looking under the door")
+	check(_on_host(operator).peek_door == host_door, "server knows")
+	check(host_door.scope_side != 0.0, "the lens is visible on the host")
+	check(operator.active_camera().is_position_in_frustum(_on_client(target).head.global_position), "the client can see the host's player through it")
+
+	var pellet: Array[Vector3] = [Vector3(-1, 0, 0)]
+	operator.send_shot(0, operator.camera.global_position, pellet)
+	await wait(0.3)
+	check(operator.arsenal.safe == false and target.health == Cfg.max_health, "the server ignores shots from a player using the camera")
+
+	operator.input.gadget_2 = false
+	await wait(0.4)
+	check(_on_host(operator).peek_door == null and host_door.scope_side == 0.0, "putting it away removes the lens on the host")
+
+
 func test_a_client_that_leaves_is_replaced_by_a_bot() -> void:
 	await _start_match()
 	var id := String(client.world.local_player.name)

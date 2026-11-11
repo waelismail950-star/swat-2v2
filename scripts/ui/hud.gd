@@ -3,9 +3,17 @@ extends CanvasLayer
 ## Heads-up display for the local player.
 
 const HIT_MARKER_TIME := 0.15
+const ALERT_TIME := 4.0
+## The screen is fully white until this many seconds of blindness remain, then fades.
+const FLASH_FADE_TIME := 0.8
+const GADGET_KEYS: Array[String] = ["G", "T"]
 const PHASE_NAMES: Array[String] = ["WAITING", "SETUP", "LIVE", "ROUND OVER", "MATCH OVER"]
 
 var game: Match
+var gadgets: GadgetSystem:
+	set(value):
+		gadgets = value
+		gadgets.alarm_raised.connect(_on_alarm_raised)
 var player: Player:
 	set(value):
 		player = value
@@ -13,6 +21,7 @@ var player: Player:
 			player.arsenal.hit_landed.connect(_on_hit_landed)
 
 var _marker_left := 0.0
+var _alert_left := 0.0
 
 @onready var _readout: Label = $Readout
 @onready var _top: Label = $Top
@@ -21,6 +30,8 @@ var _marker_left := 0.0
 @onready var _status: Label = $Status
 @onready var _hit_marker: Label = $HitMarker
 @onready var _banner: Label = $Banner
+@onready var _alert: Label = $Alert
+@onready var _flash: ColorRect = $Flash
 
 
 func _process(delta: float) -> void:
@@ -43,13 +54,25 @@ func _process(delta: float) -> void:
 	var gun := player.arsenal.weapon()
 	var ammo := "RELOADING" if gun.is_reloading() else "%d / %d" % [gun.ammo, gun.stats().mag]
 	var safe := "   (weapons safe)" if player.arsenal.safe else ""
-	_status.text = "HP %d\n%s   %s%s" % [ceili(player.health), gun.stats().name, ammo, safe]
+	var kit: Array[String] = []
+	for slot in player.gadgets.size():
+		var charges := player.gadget_charges[slot]
+		kit.append("[%s] %s%s" % [GADGET_KEYS[slot], Team.GADGET_NAMES[player.gadgets[slot]],
+				"" if charges < 0 else " x%d" % charges])
+	_status.text = "HP %d\n%s   %s%s\n%s" % [ceili(player.health), gun.stats().name, ammo, safe, "    ".join(kit)]
 
 	_banner.text = _banner_text()
 	_banner.visible = _banner.text != ""
 
 	var target := player.aimed_interactable() if not player.is_dead else null
-	_prompt.text = target.interact_prompt(player) if target != null else ""
+	if player.peek_door != null:
+		_prompt.text = "DOOR CAMERA: %s\nMove the mouse to look around. Release the key to put it away." % player.peek_door.door_name
+	else:
+		_prompt.text = target.interact_prompt(player) if target != null else ""
+
+	_flash.color.a = clampf(player.flash_left / FLASH_FADE_TIME, 0.0, 1.0)
+	_alert_left = maxf(_alert_left - delta, 0.0)
+	_alert.visible = _alert_left > 0.0
 
 	_marker_left = maxf(_marker_left - delta, 0.0)
 	_hit_marker.visible = _marker_left > 0.0
@@ -60,7 +83,7 @@ func _objective_text() -> String:
 	var entry := player.team == Team.Id.ENTRY
 	match game.phase:
 		Match.Phase.SETUP:
-			return "stage outside. Doors unlock when setup ends." if entry \
+			return "stage outside. Doors unlock when setup ends. [N] changes your gadgets." if entry \
 					else "hostage is in %s. Press F on a yellow marker to move it." % room
 		Match.Phase.ACTION:
 			if game.hostage.state == Hostage.State.FOLLOWING:
@@ -79,6 +102,12 @@ func _banner_text() -> String:
 			return "%s\n%d - %d" % ["MATCH WON" if won else "MATCH LOST",
 					game.board.scores[player.roster], game.board.scores[1 - player.roster]]
 	return "YOU ARE DOWN" if player.is_dead else ""
+
+
+func _on_alarm_raised(door: Door) -> void:
+	if player != null and player.team == Team.Id.SUSPECTS:
+		_alert.text = "TRIP ALARM: %s" % door.door_name
+		_alert_left = ALERT_TIME
 
 
 func _on_hit_landed(zone: Hitbox.Zone, killed: bool) -> void:
