@@ -61,6 +61,7 @@ func _begin(bots_think := false) -> void:
 	if not bots_think:
 		for player: Player in host.world.players.values():
 			player.brain = null
+			player.input = PlayerInput.new()   # drop whatever the bot was pressing
 	for i in 300:
 		if client.world != null and client.world.game.phase == Match.Phase.SETUP:
 			break

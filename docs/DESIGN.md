@@ -3,7 +3,7 @@
 2v2 asymmetric hostage rescue in one two-floor house. Entry Team vs Suspects, best of 5.
 Guiding rule: real technique should win because of geometry and mechanics, never because a rule forces it.
 
-Status: **Milestone 5 of 10** (controller, greybox house, doors, weapons, rounds and hostage, bots, LAN multiplayer). Everything below describes what is built, not what is planned.
+Status: **Milestone 6 of 10** (controller, greybox house, doors, weapons, rounds and hostage, bots, LAN multiplayer, gadgets). Everything below describes what is built, not what is planned.
 
 ## Run it
 
@@ -53,6 +53,7 @@ Options after `--` skip the menu, for example `godot -- --solo`:
 config/game_config.gd   every tunable (autoload `Cfg`)
 scenes/                 main.tscn, player/player.tscn
 scripts/core/           match state machine, scoreboard, teams, physics layers
+scripts/gadgets/        gadget rules and the flashbang
 scripts/game/           world: builds a match's scene and replicates the server's decisions
 scripts/net/            session: connection, lobby, match start
 scripts/ai/             bots for local test mode
@@ -66,7 +67,7 @@ docs/                   this file, KNOWN_ISSUES.md
 
 ## Controls
 
-WASD move, Shift sprint, Ctrl or C crouch (hold), Q/E lean (hold), mouse look, left click fire, R reload, 1/2 weapon, F interact (doors, hostage marker; hold on the hostage to secure), V crack door, Esc frees the mouse, click recaptures it.
+WASD move, Shift sprint, Ctrl or C crouch (hold), Q/E lean (hold), mouse look, left click fire, R reload, 1/2 weapon, F interact (doors, hostage marker; hold on the hostage to secure, hold on a wedged door to force it), V crack door, G and T use your two gadgets, N changes your gadget pair during setup, Esc frees the mouse, click recaptures it.
 
 ## Round flow
 
@@ -127,7 +128,7 @@ Each entry: what it is, the behavior it pushes players toward, and what beats it
 ### Bodies stop doors, but cannot hold them shut
 - **What:** a swinging door stops against a player and continues once they move. If someone is pressed against the far side of a closed door, it opens toward the operator instead.
 - **Incentive:** stacking tight on a door has a cost (you can foul your own entry); standing in a doorway is a risk.
-- **Counter:** body-blocking gives no free barricade, because the door just opens the other way. Real barricading is the door wedge gadget (M6), which has limited charges.
+- **Counter:** body-blocking gives no free barricade, because the door just opens the other way. Real barricading is the door wedge gadget, which has limited charges.
 
 ### Hitscan weapons, low time-to-kill
 - **What:** bullets land instantly along the crosshair. 100 health. Walls and doors stop bullets. Numbers at standstill, before tuning:
@@ -192,7 +193,7 @@ Each entry: what it is, the behavior it pushes players toward, and what beats it
 ### Setup phase
 - **What:** 25 s in which Suspects choose the hostage room and take positions; Entry is locked outside with weapons safe and no view in.
 - **Incentive:** Suspects plan a defence around a room; Entry plans an approach without knowing which room it is.
-- **Counter:** Entry's intel gadgets (M6) are the answer to not knowing; for now it is doors, sound of none, and guesswork.
+- **Counter:** the door camera answers what is behind one door; which room holds the hostage still has to be worked out.
 
 ### The hostage is fragile, and whoever shoots it loses
 - **What:** one direct hit from any weapon kills the hostage. If Entry fired the shot, Suspects win the round; if a Suspect did, Entry wins.
@@ -214,6 +215,35 @@ Each entry: what it is, the behavior it pushes players toward, and what beats it
 - **What:** if 180 s pass, Suspects win.
 - **Incentive:** Entry cannot wait outside for a mistake; Suspects are rewarded for staying alive and holding ground near the hostage rather than hunting.
 - **Counter:** a Suspect who hides far from the hostage keeps the clock but gives up the room, and an unopposed rescue takes only 15-25 s.
+
+## Gadgets
+
+Each player carries two. Entry chooses a pair during setup by pressing N (flashbang + door camera, flashbang + breaching charge, or door camera + breaching charge). Suspects always carry door wedge + trip alarm. Charges refill every round. Suspects may place theirs during setup; Entry gadgets only work once the round is live. Bots do not use gadgets.
+
+### Flashbang (Entry, 2 per round)
+- **What:** G throws it where you are looking. It bounces, and 1.5 s later blinds every player within 9 m who has line of sight to it: up to 3.5 s when close and facing it, 40 % of that when facing away. It never harms the hostage.
+- **Incentive:** crack the door, throw, then enter together while the room is blind. A solo rush without it meets defenders who can see.
+- **Counter:** look away or break line of sight when you see it land; shut the door; it blinds teammates and the thrower just as readily, so a badly timed entry or a bounce off a closed door blinds the wrong side.
+
+### Door camera (Entry, unlimited)
+- **What:** hold its key on a shut door to see the room from floor level on the far side; the mouse pans 60 degrees each way.
+- **Incentive:** know what is behind a door before you open it, instead of guessing.
+- **Counter:** while looking you cannot move or shoot, and a black lens pokes out under the door where defenders can see it, so they learn which door you are at. The low viewpoint has blind spots along the door's own wall. It stops working the moment the door moves.
+
+### Breaching charge (Entry, 1 per round)
+- **What:** stick it to a shut door. 2.5 s later the door is blown open, any wedge is destroyed, and everyone within 3.5 m of the doorway with line of sight is stunned (blinded) for up to 2.5 s. No damage.
+- **Incentive:** a fast, violent entry through one chosen door for a team that stacks back from it and goes in on the bang.
+- **Counter:** the fuse announces the door and the timing, so defenders can step out of the blast and pre-aim; operators who stay beside the door are stunned too; there is only one.
+
+### Door wedge (Suspects, 2 per round)
+- **What:** jams a shut door so it will not open or crack. A yellow wedge shows at its foot.
+- **Incentive:** channel Entry toward the doors you are watching and buy time on the clock.
+- **Counter:** anyone can force a wedged door by holding F on it for 4 uninterrupted seconds, a breaching charge removes it instantly, and most rooms have another door. A Suspect can pull the wedge out with F, so it also blocks the Suspects' own retreat until they do.
+
+### Trip alarm (Suspects, 2 per round)
+- **What:** a small orange box placed on the floor just inside a doorway. The first Entry operator to come within 1.2 m sets it off, alerting both Suspects to that door. It is used up.
+- **Incentive:** watch one approach with a gadget so both defenders can watch the other.
+- **Counter:** it is visible: the door camera or a cracked door shows it, one bullet destroys it without raising the alert, and another door avoids it.
 
 ## Bots (local test mode)
 
@@ -277,6 +307,7 @@ The shooter's own machine draws its tracers immediately; damage, hit markers and
 - **Fire rate is checked with a small burst allowance** (3 shots), so shots bunched up by the network are not discarded. The server cannot see reloads, so it infers one from any pause as long as a reload.
 
 **How it is built**
+- Gadget use is one more client request (*I used the gadget in this slot, at this door or in this direction*). The server applies the rules, then replicates the results: door attachments ride along with door state, grenades are flown by the server, blindness and remaining charges are sent per player.
 - `Session` (connection, lobby, start) and `World` (the match's scene) sit at the same node paths on every machine, so remote calls line up. `World` is built identically everywhere from one participant list sent by the host.
 - A player node's network authority is the machine that owns it. Messages on the player node go owner -> everyone (state) or owner -> server (requests). Messages on `World` go server -> clients only.
 - Offline play uses the same code: with no connection the local machine is "the server".
@@ -301,6 +332,6 @@ The shooter's own machine draws its tracers immediately; damage, hit markers and
 
 ## Tunables
 
-All in `config/game_config.gd`. Current groups: player body, movement, lean, look, doors, combat (including the per-weapon table), teams, match, hostage, bots.
+All in `config/game_config.gd`. Current groups: player body, movement, lean, look, doors, combat (including the per-weapon table), teams, match, hostage, bots, gadgets.
 
 Map dimensions are not tunables; they live in `scripts/world/house.gd`.
