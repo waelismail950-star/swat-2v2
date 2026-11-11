@@ -190,10 +190,11 @@ func _walk_to(goal: Vector3, delta: float) -> bool:
 	var next := _route[0]
 	var off_course := _turn_toward(Vector3(next.x, player.camera.global_position.y, next.z), delta)
 	var door := _door_ahead()
-	if door != null and not (door.state == Door.State.OPEN and door.is_settled()):
-		# Face the panel and press interact once it has stopped moving.
+	if door != null and door.state != Door.State.OPEN:
+		# Face the panel and open it. Never wait for the door to stop moving first: a door
+		# that is stopped against this bot's own body would wait for the bot in return.
 		_turn_toward(door.panel_point(), delta)
-		if door.is_settled() and player.aimed_interactable() == door:
+		if player.aimed_interactable() == door:
 			player.input.interact = _pulse
 		return false
 
