@@ -9,6 +9,16 @@ var body_radius := 0.3
 ## Eye sits this far below the top of the capsule.
 var eye_drop := 0.12
 
+# --- Hitboxes (also what other players see) ---
+var head_radius := 0.13
+var torso_width := 0.46
+var legs_width := 0.38
+var body_depth := 0.26
+## Gap between the top of the capsule and the shoulders.
+var neck_gap := 0.26
+## The torso follows this fraction of the head's lean.
+var torso_lean_frac := 0.5
+
 # --- Movement ---
 var walk_speed := 3.2
 var sprint_speed := 5.4
@@ -51,8 +61,9 @@ var sprint_fire_delay := 0.25
 var weapon_swap_time := 0.45
 ## Spread multiplier while crouched.
 var crouch_spread_mult := 0.7
-## How fast recoil settles back, per second (higher = snappier).
-var recoil_recovery_rate := 5.0
+## How fast recoil settles back, per second (higher = snappier). A held trigger levels off
+## around recoil_pitch_deg / (fire_interval * this) degrees above the aim point.
+var recoil_recovery_rate := 7.0
 var weapon_range := 100.0
 
 ## Per weapon:
@@ -68,7 +79,7 @@ var weapons := {
 	"carbine": {
 		name = "Carbine", auto = true, damage = 34.0, pellets = 1, fire_interval = 0.095,
 		mag = 30, reload_time = 2.3, spread_deg = 0.4, move_spread_deg = 3.0,
-		recoil_pitch_deg = 1.3, recoil_yaw_deg = 0.5,
+		recoil_pitch_deg = 1.1, recoil_yaw_deg = 0.5,
 		falloff_start = 30.0, falloff_end = 60.0, falloff_min = 0.7,
 	},
 	"pistol": {
@@ -97,7 +108,7 @@ var rounds_to_win := 3
 ## Sides swap once, after this many rounds.
 var swap_sides_after_round := 2
 var setup_time := 25.0
-var round_time := 180.0
+var round_time := 150.0
 ## Pause on the result screen between rounds.
 var round_end_time := 6.0
 ## Pause on the final score before a new match starts.

@@ -207,18 +207,27 @@ func test_recoil_kicks_up_and_settles() -> void:
 	check_near(shooter.head.rotation.x, rest, deg_to_rad(0.05), "view settles back")
 
 
+## Highest recoil seen over the next `seconds`.
+func _peak_recoil(seconds: float) -> float:
+	var peak := 0.0
+	for i in ceili(seconds * 60):
+		await get_tree().physics_frame
+		peak = maxf(peak, rad_to_deg(shooter.arsenal.recoil.y))
+	return peak
+
+
 func test_sustained_fire_climbs_then_holds() -> void:
-	shooter.input.fire = true
-	await wait(0.2)
-	var early := rad_to_deg(shooter.arsenal.recoil.y)
-	await wait(1.0)
-	var late := rad_to_deg(shooter.arsenal.recoil.y)
-	shooter.input.fire = false
-	check(late > early, "recoil keeps climbing during a burst (%.2f -> %.2f deg)" % [early, late])
-	# Recovery balances the kick, so a long spray settles at a fixed offset instead of climbing forever.
 	var stats: Dictionary = Cfg.weapons.carbine
-	var ceiling: float = stats.recoil_pitch_deg / (stats.fire_interval * Cfg.recoil_recovery_rate)
-	check(late < ceiling * 1.3, "recoil levels off near %.1f deg, got %.2f" % [ceiling, late])
+	shooter.input.fire = true
+	var first_shot := await _peak_recoil(0.05)
+	await wait(1.0)
+	var settled := await _peak_recoil(0.3)
+	shooter.input.fire = false
+	check_near(first_shot, stats.recoil_pitch_deg, 0.2, "the first shot kicks by the weapon's recoil")
+	check(settled > first_shot * 1.3, "holding the trigger climbs higher (%.2f -> %.2f deg)" % [first_shot, settled])
+	# Recovery balances the kick, so a long spray settles at a fixed offset instead of climbing forever.
+	var ceiling: float = stats.recoil_pitch_deg / (1.0 - exp(-stats.fire_interval * Cfg.recoil_recovery_rate))
+	check(settled < ceiling * 1.15, "and levels off at a peak near %.1f deg, got %.2f" % [ceiling, settled])
 
 
 func test_moving_widens_spread_and_crouching_tightens_it() -> void:

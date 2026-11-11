@@ -3,15 +3,6 @@ extends Node3D
 ## What other players see and shoot: head, torso and legs. Each visible part has a
 ## hitbox of exactly the same shape, so what you can see is what you can hit.
 
-const HEAD_RADIUS := 0.13
-const TORSO_WIDTH := 0.46
-const LEGS_WIDTH := 0.38
-const DEPTH := 0.26
-## Gap between the top of the capsule and the shoulders.
-const NECK := 0.26
-## The torso follows this fraction of the head's lean.
-const TORSO_LEAN := 0.5
-
 var _parts: Array[Node3D] = []  # head, torso, legs; each holds a mesh and a hitbox
 var _hitboxes: Array[Hitbox] = []
 var _torso_shape := BoxShape3D.new()
@@ -25,10 +16,10 @@ var _first_person := false
 
 func setup(target: Node) -> void:
 	var head_shape := SphereShape3D.new()
-	head_shape.radius = HEAD_RADIUS
+	head_shape.radius = Cfg.head_radius
 	var head_mesh := SphereMesh.new()
-	head_mesh.radius = HEAD_RADIUS
-	head_mesh.height = HEAD_RADIUS * 2.0
+	head_mesh.radius = Cfg.head_radius
+	head_mesh.height = Cfg.head_radius * 2.0
 	_add_part(target, Hitbox.Zone.HEAD, head_shape, head_mesh)
 	_add_part(target, Hitbox.Zone.BODY, _torso_shape, _torso_mesh)
 	_add_part(target, Hitbox.Zone.BODY, _legs_shape, _legs_mesh)
@@ -65,13 +56,13 @@ func hitbox_rids() -> Array[RID]:
 ## Positions the parts for a capsule of `height` and a lean of `lean_frac` (-1..1).
 func pose(height: float, lean_frac: float) -> void:
 	var hip := height * 0.5
-	var shoulder := height - NECK
+	var shoulder := height - Cfg.neck_gap
 	var lean := lean_frac * Cfg.lean_offset
 	_parts[0].position = Vector3(lean, height - Cfg.eye_drop, 0.0)
-	_parts[1].position = Vector3(lean * TORSO_LEAN, (hip + shoulder) * 0.5, 0.0)
+	_parts[1].position = Vector3(lean * Cfg.torso_lean_frac, (hip + shoulder) * 0.5, 0.0)
 	_parts[2].position = Vector3(0.0, hip * 0.5, 0.0)
-	var torso_size := Vector3(TORSO_WIDTH, shoulder - hip, DEPTH)
-	var legs_size := Vector3(LEGS_WIDTH, hip, DEPTH)
+	var torso_size := Vector3(Cfg.torso_width, shoulder - hip, Cfg.body_depth)
+	var legs_size := Vector3(Cfg.legs_width, hip, Cfg.body_depth)
 	_torso_shape.size = torso_size
 	_torso_mesh.size = torso_size
 	_legs_shape.size = legs_size

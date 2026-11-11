@@ -1,6 +1,6 @@
 # Known issues and unfinished work
 
-Updated at Milestone 7.
+Updated at Milestone 8. Nothing here has been checked by a human player; start with [PLAYTEST.md](PLAYTEST.md).
 
 ## Decisions waiting on you
 - **Best-of-5 cannot be side-fair.** With one swap after round 2, one roster plays Entry twice and the other up to three times. If one side turns out stronger, that matters. Options: keep it; swap every round; or play best-of-6 with a tiebreak. `swap_sides_after_round` is in the config.
@@ -14,13 +14,13 @@ Updated at Milestone 7.
 - **Gadget feel and balance.** Throw arc, fuse lengths, blind durations and the 4 s wedge force time are first guesses.
 - **Movement, mouse and gun feel.** Speeds, lean, recoil, spread and timings are first guesses. Tests prove they match the config, not that they feel right. Mouse look has no automated test at all.
 - **Door feel.** Swing speed, crack angle and reach are first guesses.
-- **Round pacing.** An unopposed bot rescue takes 13-23 s, so the 180 s clock is probably far too generous and the house may be too small for it to matter. To be tuned in M8.
+- **Round pacing.** An unopposed bot rescue takes 13-23 s and the clock is 150 s. Whether careful human rounds fill that time, or the house is simply too small, is unknown.
 - **Map balance.** Suspected weak points to watch in playtests:
   - Kids room has a single door. It may be too strong a hostage room.
   - The Deck Door and the Front Door both open into a long hall; a Suspect at the far end of a hall sees the door open.
   - The stairwell is a blind U-turn. It may be too hard to push without a flashbang.
   - Entry spawns 4 m from the Front Door and Suspects spawn just inside it. Opening it the instant setup ends starts a fight at once.
-- **Side balance.** In a 16-round bot-versus-bot sample Entry won 10 and Suspects 6. Bots do not use technique, so this says little about human play.
+- **Side balance.** Bot-versus-bot: a lone Entry bot wins 0 % against two guards, a pair 54 %, a pair entering on a flash 100 %. That supports "coordination beats rushing" but says nothing about humans who lean, listen and bait. The Study is the extreme case (0 % without a flash, 100 % with).
 
 ## Limitations
 - **All audio is placeholder:** synthesised noise bursts and beeps, no recorded sounds, no music, no voices.
@@ -50,7 +50,7 @@ Updated at Milestone 7.
 - **Anyone can leave the house** once the round is live, including Suspects.
 - **No spectator controls.** A downed player sees through one living teammate; there is no free camera.
 - **No kill feed, scoreboard screen or names over heads.** Teammates are told apart from enemies by colour only (blue Entry, red Suspects, yellow hostage).
-- **Spraying a carbine at a chest about 12 m away walks the rounds into the head.** Recoil levels off roughly one head-height above the aim point at that distance. Revisit in the balance pass (M8).
+- **The Study and the Master bedroom are much harder for bots to take than the Kitchen and Kids room.** The cause is which way the hall door swings (an open door shields the entrant from one corner in some rooms and not others) and how close the guard posts are to the door. It may or may not matter to humans.
 - **The lean pose looks crude.** The head shifts fully, the torso half, the legs not at all. The hitboxes match what is drawn, so it is fair, just ugly.
 - **No aim-down-sights.** Hip fire only, by design for now.
 - **Lean and crouch are hold-only.** No toggle option.
@@ -61,4 +61,4 @@ Updated at Milestone 7.
 - **Cosmetic:** thin light leaks under doors, jagged shadow edges, floor plans in docs/img rendered on a software renderer.
 
 ## Not started
-Balance pass (Milestone 8), hostage self-escape (9, locked).
+Hostage self-escape (Milestone 9, locked until you have playtested). Polish (Milestone 10: real assets and audio, only if the game is fun).

@@ -3,7 +3,7 @@
 2v2 asymmetric hostage rescue in one two-floor house. Entry Team vs Suspects, best of 5.
 Guiding rule: real technique should win because of geometry and mechanics, never because a rule forces it.
 
-Status: **Milestone 7 of 10** (controller, greybox house, doors, weapons, rounds and hostage, bots, LAN multiplayer, gadgets, sound). Everything below describes what is built, not what is planned.
+Status: **Milestone 8 of 10**: everything through the balance pass is built. Next is your playtest (see [PLAYTEST.md](PLAYTEST.md)); Milestone 9 (hostage self-escape) is locked until then. Everything below describes what is built, not what is planned.
 
 ## Run it
 
@@ -14,6 +14,7 @@ Requires Godot 4.4.1.
 | Play | `godot` from the repo root (or open the project in the editor and press F5), then use the menu |
 | Run all headless tests | `./run_tests.sh` |
 | Run a real host + client match on one machine | `./tests/net/two_instances.sh` |
+| Print bot-versus-bot win rates by Entry tactic | `godot --headless --fixed-fps 60 res://tests/balance/probe.tscn` |
 
 On Windows, or without bash, `run_tests.sh` is these two commands:
 
@@ -62,8 +63,8 @@ scripts/combat/         weapons, hit resolution, hitboxes, shot visuals
 scripts/player/         controller, input struct, visible body, first-person gun
 scripts/ui/             HUD, menu
 scripts/world/          house (map data and builder), door, hostage, hostage markers, waypoint graph
-tests/                  headless runner and test_*.gd; net/ holds the two-process check
-docs/                   this file, KNOWN_ISSUES.md
+tests/                  headless runner and test_*.gd; net/ holds the two-process check, balance/ the bot probe
+docs/                   this file, PLAYTEST.md, KNOWN_ISSUES.md
 ```
 
 ## Controls
@@ -73,7 +74,7 @@ WASD move, Shift sprint, Ctrl or C crouch (hold), Q/E lean (hold), mouse look, l
 ## Round flow
 
 1. **Setup (25 s).** Suspects spawn in the Foyer; the hostage starts in a random one of four rooms. A Suspect can move it by pressing F on the yellow marker in another candidate room. Entry spawns outside. Exterior doors are locked and all weapons are safe.
-2. **Live (180 s).** Doors unlock, weapons go hot. Entry finds the hostage and holds F on it for 3 s to secure it.
+2. **Live (150 s).** Doors unlock, weapons go hot. Entry finds the hostage and holds F on it for 3 s to secure it.
 3. **Extraction.** The secured hostage walks a fixed route to the extraction point outside (where Entry spawned), but only while a living Entry operator is within 4 m.
 4. **Round over (6 s),** then the next round. First roster to 3 wins takes the match; a new match starts 12 s later.
 
@@ -164,7 +165,7 @@ Each entry: what it is, the behavior it pushes players toward, and what beats it
 - **Counter:** sprinting is still the fastest way to cross open ground or reach the hostage when you know the lane is clear.
 
 ### Recoil
-- **What:** each shot kicks the view up with a small random sideways push; it settles on its own. Holding the trigger climbs, then levels off about 2.7 degrees above the aim point for the carbine.
+- **What:** each shot kicks the view up with a small random sideways push; it settles on its own. Holding the trigger climbs, then levels off about 2 degrees above the aim point for the carbine: still on the torso down the length of a hall.
 - **Incentive:** short bursts at range; aim lower when spraying.
 - **Counter:** not applicable (it is a cost on the shooter).
 
@@ -213,7 +214,7 @@ Each entry: what it is, the behavior it pushes players toward, and what beats it
 - **Counter:** Entry can clear the route first and open its doors in advance. Suspects cannot body-block the hostage, only stop the escorts.
 
 ### The clock
-- **What:** if 180 s pass, Suspects win.
+- **What:** if 150 s pass, Suspects win.
 - **Incentive:** Entry cannot wait outside for a mistake; Suspects are rewarded for staying alive and holding ground near the hostage rather than hunting.
 - **Counter:** a Suspect who hides far from the hostage keeps the clock but gives up the room, and an unopposed rescue takes only 15-25 s.
 
@@ -365,8 +366,27 @@ The shooter's own machine draws its tracers immediately; damage, hit markers and
 - Sound needs no network messages: each machine derives every sound from state it already has (player positions and stance, door states, shots it is shown, gadget events) and runs the propagation model for its own listener.
 - Renderer is GL Compatibility: it runs on weak laptops and is enough for greybox.
 
+## Balance evidence
+
+Bots cannot tell us whether the game is fun, but they can check the central claim. `tests/balance/probe.tscn` runs bot-versus-bot rounds with two guards in the hostage room and prints how often Entry wins:
+
+| Entry tactic | Entry win rate (48 rounds each) |
+| --- | --- |
+| One bot goes in alone | 0 % |
+| Two bots go in together | 54 % |
+| Two bots go in as the guards are flashed | 100 % |
+
+So with these numbers a solo rush fails, an unsupported pair is a coin flip, and a coordinated entry on a flash wins. Caveats are in [PLAYTEST.md](PLAYTEST.md): bots do not lean or use cover, and the flash is a perfectly timed stand-in.
+
+Changes made in the balance pass:
+- Carbine recoil lowered and recovery raised, so a held trigger stays on the torso at hall range and no longer walks into the head.
+- Round clock cut from 180 s to 150 s; an unopposed rescue takes 13-23 s, so 180 s was never going to bind.
+- Hitbox sizes moved into the config with everything else.
+
 ## Tunables
 
-All in `config/game_config.gd`. Current groups: player body, movement, lean, look, doors, combat (including the per-weapon table), teams, match, hostage, bots, gadgets, sound.
+All in `config/game_config.gd`. Current groups: player body, hitboxes, movement, lean, look, doors, combat (including the per-weapon table), teams, match, hostage, bots, gadgets, sound.
 
-Map dimensions are not tunables; they live in `scripts/world/house.gd`.
+Map dimensions are not tunables; they live in `scripts/world/house.gd`. Network tolerances and bot behaviour constants live beside the code they belong to.
+
+Which number to reach for when something feels wrong is tabulated in [PLAYTEST.md](PLAYTEST.md).
